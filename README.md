@@ -20,10 +20,6 @@ These features will increase the security of the program, but are otherwise not 
 #### Database encryption
   - Encrypt the data stored on disk so it can't be accessed without going through MQTT Vault
   - Maybe support using SSL private key as password?
-#### Support environment variables
-  - Sensitive fields only (broker credentials, certificates)
-  - Environment variables override values from the config file
-  - Command-line args override environment variables
 
 ## Notes for Contributers
 
