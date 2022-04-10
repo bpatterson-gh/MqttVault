@@ -1,0 +1,13 @@
+[package]
+name = "mqtt_vault"
+version = "0.7.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crossbeam-channel = "0.5.4"
+ctrlc = {version = "3.2.1", features = ["termination"] }
+json = "0.12.4"
+paho-mqtt = "0.10"
+uuid = { version = "0.8.2", features = ["v4"] }

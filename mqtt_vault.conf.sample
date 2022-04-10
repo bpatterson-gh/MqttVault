@@ -1,0 +1,55 @@
+# This is an example of a config file for MQTT Vault.
+# All possible options are listed here along with explanations.
+# Pass the file in with -s or --settings (e.g. mqtt_vault -s mqtt_vault.conf.sample).
+
+# address - IP/hostname and port of MQTT broker
+# Default is tcp://localhost:1883
+#address = tcp://localhost:1883
+
+# ca-file - Path to CA file (SSL only)
+# Default is none
+#ca-file = 
+
+# cert-file - Path to client certificate (SSL only)
+# This may be a combined cert and key, or it may just be the cert 
+# Default is none
+#cert-file = 
+
+# key-file - Path to client certificate's private key (SSL Only)
+# Do not define this field if using a combined cert and key for cert-file
+# Default is none
+#key-file = certs/client.key  
+
+# user - MQTT user
+# Default is none
+#user = 
+
+# password - MQTT user's password
+# Default is none
+#password = 
+
+# client-id - MQTT client ID
+# Default is a random value
+#client-id = clId
+
+# topic-root - Root topic that mqtt_vault will use to send/receive messages
+# Default is mqtt_vault, which allows sending on mqtt_vault/set and receiving on mqtt_vault/get
+#topic-root = mqtt_vault
+
+# db-root - Path to the database root
+# Default is db
+#db-root = db
+
+# mqtt-v5 - Connect with MQTT v5
+# Allows response topics to be used when sending a request to the get topic
+# Default is true
+#mqtt-v5 = true
+
+# max-retries - Max number of reconnect attempts to make if the broker connection is lost
+# Values below zero are interpreted as infinite retries
+# Default is -1
+#max-retries = -1
+
+# retry-interval - Number of seconds to wait before attempting to reconnect to the broker
+# Default is 30
+#retry-interval = 30
