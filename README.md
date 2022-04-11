@@ -1,5 +1,7 @@
 # MQTT Vault
 
+![mqtt_vault](https://user-images.githubusercontent.com/70041071/162647526-88c839e4-326a-410d-a629-0bbb60dfa032.svg)
+
 A JSON database controlled via MQTT.
 
 ## What it Does
