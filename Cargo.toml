@@ -8,7 +8,6 @@ documentation = "https://bpatterson.dev/man/mqtt_vault.html"
 homepage = "https://bpatterson.dev/projects/mqtt_vault"
 repository = "https://github.com/bpatterson-gh/MqttVault"
 license = "MPL-2.0"
-license-file = "LICENSE"
 keywords = ["mqtt", "database", "iot"]
 categories = ["command-line-utilities"]
 
