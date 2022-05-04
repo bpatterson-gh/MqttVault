@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod test {
-    use crate::{Arguments, process_env_vars, process_cli_args, init_args, start_client};
+    use crate::{init_args, process_cli_args, process_env_vars, start_client, Arguments};
     use std::fs;
     use std::path::Path;
     use std::sync::Once;
@@ -57,7 +57,10 @@ mod test {
         s.push_str("Comment\n");
         s.push_str(&std::format!("db-root = {}\n", VALID_CONF_DB_ROOT));
         s.push_str(&std::format!("max-retries = {}\n", VALID_CONF_MAX_RETRIES));
-        s.push_str(&std::format!("retry-interval = {}\n", VALID_CONF_RETRY_INTERVAL));
+        s.push_str(&std::format!(
+            "retry-interval = {}\n",
+            VALID_CONF_RETRY_INTERVAL
+        ));
         s.push_str("mqtt-v5 = fAlSe \n");
         s
     }
@@ -129,7 +132,7 @@ mod test {
         assert_eq!(args.address, "tcp://localhost:1883");
         assert_eq!(args.mqtt_v5, true);
     }
-    
+
     // Verify that short command line arguments are applied correctly
     #[test]
     fn env_vars() {
@@ -313,7 +316,7 @@ struct Arguments {
 impl Arguments {
     // Create a set of default Arguments
     pub fn new() -> Arguments {
-        let client_id = Uuid::new_v4().to_simple().to_string();
+        let client_id = Uuid::new_v4().as_simple().to_string();
         Arguments {
             address: String::from("tcp://localhost:1883"),
             ca_file: String::from(""),
@@ -382,19 +385,19 @@ impl Arguments {
                                 "max-retries" => args.max_retries(&f_args[i + 1]),
                                 "mqtt-v5" => match f_args[i + 1].to_lowercase().as_str() {
                                     "0" | "false" => args.mqtt_v5(false),
-                                    _ => args.mqtt_v5(true)
+                                    _ => args.mqtt_v5(true),
                                 },
                                 "password" => args.password(&f_args[i + 1]),
                                 "retry-interval" => args.retry_interval(&f_args[i + 1]),
                                 "topic-root" => args.topic_root(&f_args[i + 1]),
                                 "user" => args.user(&f_args[i + 1]),
-                                _ => &mut args
+                                _ => &mut args,
                             };
                         }
-                    },
-                    Err(e_str) => return Err(e_str)
+                    }
+                    Err(e_str) => return Err(e_str),
                 }
-            },
+            }
             Err(_) => {
                 let mut e_str = String::from("Failed to open ");
                 e_str.push_str(file_path);
@@ -408,42 +411,34 @@ impl Arguments {
         self.address = String::from(address);
         self
     }
-    
     pub fn ca_file(&mut self, ca_file: &str) -> &mut Self {
         self.ca_file = String::from(ca_file);
         self
     }
-    
     pub fn cert_file(&mut self, cert_file: &str) -> &mut Self {
         self.cert_file = String::from(cert_file);
         self
     }
-    
     pub fn key_file(&mut self, key_file: &str) -> &mut Self {
         self.key_file = String::from(key_file);
         self
     }
-    
     pub fn user(&mut self, user: &str) -> &mut Self {
         self.user = String::from(user);
         self
     }
-    
     pub fn password(&mut self, password: &str) -> &mut Self {
         self.password = String::from(password);
         self
     }
-    
     pub fn client_id(&mut self, client_id: &str) -> &mut Self {
         self.client_id = String::from(client_id);
         self
     }
-    
     pub fn topic_root(&mut self, topic_root: &str) -> &mut Self {
         self.topic_root = String::from(topic_root);
         self
     }
-    
     pub fn db_root(&mut self, db_root: &str) -> &mut Self {
         self.db_root = String::from(db_root);
         self
@@ -490,7 +485,7 @@ fn process_env_vars(env_vars: std::env::Vars, args: &mut Arguments) {
             "MQTTV_USER" => args.user(&val),
             "MQTTV_V5" => match val.to_lowercase().as_str() {
                 "0" | "false" => args.mqtt_v5(false),
-                _ => args.mqtt_v5(true)
+                _ => args.mqtt_v5(true),
             },
             _ => args,
         };
@@ -514,9 +509,9 @@ fn process_cli_args(cli_args: Vec<String>, args: &mut Arguments) {
             "-u" | "--user" => args.user(&cli_args[i + 1]),
             "-v" | "--mqtt-v5" => match cli_args[i + 1].to_lowercase().as_str() {
                 "0" | "false" => args.mqtt_v5(false),
-                _ => args.mqtt_v5(true)
+                _ => args.mqtt_v5(true),
             },
-            _ => args
+            _ => args,
         };
     }
 }
@@ -529,7 +524,7 @@ fn init_args() -> Arguments {
         if cli_args[i] == "-s" || cli_args[i] == "--settings" {
             match Arguments::from_file(&cli_args[i + 1]) {
                 Ok(from_file) => args = Some(from_file),
-                Err(e_str) => eprintln!("{}", e_str)
+                Err(e_str) => eprintln!("{}", e_str),
             }
         }
     }
@@ -541,29 +536,45 @@ fn init_args() -> Arguments {
 
 // Create an MqttClient with the given args and verify that it connects
 fn start_client(args: Arguments) -> Result<MqttClient, String> {
-    let client = MqttClient::new(&args.address, &args.client_id, &args.topic_root, &args.db_root, args.mqtt_v5, args.max_retries, args.retry_interval);
-    let user = if args.user == "" { None } else { Some(args.user.as_str()) };
-    let password = if args.password == "" { None } else { Some(args.password.as_str()) };
+    let client = MqttClient::new(
+        &args.address,
+        &args.client_id,
+        &args.topic_root,
+        &args.db_root,
+        args.mqtt_v5,
+        args.max_retries,
+        args.retry_interval,
+    );
+    let user = if args.user == "" {
+        None
+    } else {
+        Some(args.user.as_str())
+    };
+    let password = if args.password == "" {
+        None
+    } else {
+        Some(args.password.as_str())
+    };
     let mut ssl_opts: Option<SslOptions> = None;
     if args.cert_file != "" {
         let mut builder = SslOptionsBuilder::new();
         match builder.trust_store(&args.ca_file) {
             Ok(_) => (),
-            Err(e) => return Err(std::format!("Bad ca_file ( {} ): {}", args.ca_file, e))
+            Err(e) => return Err(std::format!("Bad ca_file ( {} ): {}", args.ca_file, e)),
         }
         match builder.key_store(&args.cert_file) {
             Ok(_) => (),
-            Err(e) => return Err(std::format!("Bad cert_file ( {} ): {}", args.cert_file, e))
+            Err(e) => return Err(std::format!("Bad cert_file ( {} ): {}", args.cert_file, e)),
         }
         match builder.private_key(&args.key_file) {
             Ok(_) => (),
-            Err(e) => return Err(std::format!("Bad key_file ( {} ): {}", args.key_file, e))
+            Err(e) => return Err(std::format!("Bad key_file ( {} ): {}", args.key_file, e)),
         }
         ssl_opts = Some(builder.finalize());
     }
     match client.connect(user, password, ssl_opts) {
         Ok(_) => (),
-        Err(e) => return Err(std::format!("Failed to connect to MQTT broker: {}", e))
+        Err(e) => return Err(std::format!("Failed to connect to MQTT broker: {}", e)),
     }
     Ok(client)
 }
@@ -580,10 +591,13 @@ fn main() {
     static HALT: AtomicBool = AtomicBool::new(false);
     ctrlc::set_handler(move || {
         HALT.store(true, Ordering::Relaxed);
-    }).expect("Failed to set handler for termination signals");
+    })
+    .expect("Failed to set handler for termination signals");
 
     while client.main_loop() {
-        if HALT.load(Ordering::Relaxed) { return; }
+        if HALT.load(Ordering::Relaxed) {
+            return;
+        }
     }
 }
 

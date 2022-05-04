@@ -1,6 +1,6 @@
 [package]
 name = "mqtt_vault"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Bruce Patterson"]
 edition = "2021"
 description = "JSON database controlled via MQTT"
@@ -15,7 +15,7 @@ categories = ["command-line-utilities"]
 
 [dependencies]
 crossbeam-channel = "0.5.4"
-ctrlc = {version = "3.2.1", features = ["termination"] }
+ctrlc = {version = "3.2.2", features = ["termination"] }
 json = "0.12.4"
-paho-mqtt = "0.10"
-uuid = { version = "0.8.2", features = ["v4"] }
+paho-mqtt = "0.11.1"
+uuid = { version = "1.0.0", features = ["v4"] }

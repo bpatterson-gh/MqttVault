@@ -5,3 +5,4 @@ test_data/db
 test_data/json
 test_data/mosquitto.log
 *.sublime-*
+.vscode
