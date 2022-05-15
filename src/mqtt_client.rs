@@ -2,9 +2,12 @@
 
 #[cfg(test)]
 mod test {
-
     use crate::MqttClient;
     use paho_mqtt as mqtt;
+    use std::fs::File;
+    use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read};
+    use std::path::Path;
+    use std::sync::Once;
     use std::time::Duration;
 
     // MqttClient options
@@ -14,6 +17,16 @@ mod test {
     static NONEXISTENT_ADDR: &str = "tcp://nonexistent:1883";
     static TOPIC_ROOT: &str = "mqttvault";
     static TEST_DB: &str = "test_data/db";
+
+    // Initialize test files
+    static INIT_FILES: Once = Once::new();
+    fn init_files() {
+        INIT_FILES.call_once(|| {
+            let path = Path::new(TEST_DB);
+            let res = std::fs::remove_dir_all(path);
+            assert!(res.is_ok());
+        });
+    }
 
     // MQTT SSL options for secure listeners
     pub fn ssl_options() -> mqtt::SslOptions {
@@ -32,6 +45,7 @@ mod test {
     // Expects an MQTT Broker to be running on localhost:1883
     #[test]
     fn mqtt_connect_success() {
+        init_files();
         let cli = MqttClient::new(
             TCP_ADDR,
             "rusttestcli-conn",
@@ -49,6 +63,7 @@ mod test {
     // Expects an MQTT Broker to be running on localhost:8883 using the certs in test_data/certs
     #[test]
     fn mqtt_connect_ssl() {
+        init_files();
         let cli = MqttClient::new(
             SSL_ADDR,
             "rusttestcli-conn-ssl",
@@ -66,6 +81,7 @@ mod test {
     // Expects an MQTT Broker to be running on localhost:8884 using the certs in test_data/certs and a password file
     #[test]
     fn mqtt_connect_ssl_password() {
+        init_files();
         let cli = MqttClient::new(
             SSL_PASS_ADDR,
             "rusttestcli-conn-ssl-pwd",
@@ -86,6 +102,7 @@ mod test {
     // Handle a failed connection
     #[test]
     fn mqtt_connect_failure() {
+        init_files();
         let cli = MqttClient::new(
             NONEXISTENT_ADDR,
             "rusttestfailcli",
@@ -128,6 +145,7 @@ mod test {
     // Convert topic strings to JSON file paths with a simple root topic "mqttvault/get" or "mqttvault/set"
     #[test]
     fn topic_to_path_single_root() {
+        init_files();
         let mut cli = MqttClient::new(
             TCP_ADDR,
             "rusttestcli-ttp",
@@ -143,6 +161,7 @@ mod test {
     // Convert topic strings to JSON file paths with a nested root topic "mqttvault/subtopic/get" or "mqttvault/subtopic/set"
     #[test]
     fn topic_to_path_nested_root() {
+        init_files();
         let topic_root = "mqttvault/subtopic";
         let mut cli = MqttClient::new(
             TCP_ADDR,
@@ -170,6 +189,7 @@ mod test {
     // Update the database on disk for given mqtt topics/payloads
     #[test]
     fn db_updates() {
+        init_files();
         let cli = MqttClient::new(TCP_ADDR, "rusttestcli-db", TOPIC_ROOT, TEST_DB, true, 1, 10);
         let res = cli.update_db("mqttvault/set/update_db", "\"nice\"");
         assert!(res.is_ok());
@@ -240,6 +260,35 @@ mod test {
         }
     }
 
+    // Gets the value on disk for a given client and topic
+    fn get_file_contents(mqtt_client: &MqttClient, topic: &str) -> Result<String, IoError> {
+        let db_path = mqtt_client.topic_path(topic)?;
+        match File::open(db_path) {
+            Ok(mut file) => {
+                let mut ret = String::new();
+                file.read_to_string(&mut ret)?;
+                Ok(ret)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    // Sends a payload to the set topic and returns the value written to disk
+    fn mqtt_send(
+        mqtt_client: &mut MqttClient,
+        paho_client: &mut mqtt::Client,
+        set_topic: &str,
+        payload: &str,
+    ) -> Result<String, IoError> {
+        let message = mqtt::Message::new(set_topic, payload, 2);
+        let res = paho_client.publish(message);
+        if !res.is_ok() {
+            return Err(IoError::new(IoErrorKind::Other, res.err().unwrap()));
+        }
+        receive_and_process(mqtt_client);
+        get_file_contents(mqtt_client, set_topic)
+    }
+
     // Simulates a simple interaction where a message is sent to the set topic and read from the get topic
     fn mqtt_simple(mqtt_client: &mut MqttClient, paho_client: &mut mqtt::Client) {
         let get_topic = "mqttvault/get/simple";
@@ -250,10 +299,9 @@ mod test {
         let paho_recv = paho_client.start_consuming();
 
         // Send a set message
-        let message = mqtt::Message::new("mqttvault/set/simple", payload, 2);
-        let res = paho_client.publish(message);
+        let res = mqtt_send(mqtt_client, paho_client, "mqttvault/set/simple", payload);
         assert!(res.is_ok());
-        receive_and_process(mqtt_client);
+        assert_eq!(res.unwrap(), payload);
 
         // Check for a message on the get topic
         let recv = paho_recv.recv_timeout(Duration::from_millis(1000));
@@ -280,10 +328,9 @@ mod test {
         let paho_recv = paho_client.start_consuming();
 
         // Send a set message
-        let message = mqtt::Message::new("mqttvault/set/v5resp", payload, 2);
-        let res = paho_client.publish(message);
+        let res = mqtt_send(mqtt_client, paho_client, "mqttvault/set/v5resp", payload);
         assert!(res.is_ok());
-        receive_and_process(mqtt_client);
+        assert_eq!(res.unwrap(), payload);
 
         // Send a get message with a response topic
         let mut props = mqtt::Properties::new();
@@ -319,10 +366,9 @@ mod test {
         let get_topic = "mqttvault/get/fallback";
         let payload = "\"fallback_response_test\"";
         // Send a set message
-        let message = mqtt::Message::new("mqttvault/set/fallback", payload, 2);
-        let res = paho_client.publish(message);
+        let res = mqtt_send(mqtt_client, paho_client, "mqttvault/set/fallback", payload);
         assert!(res.is_ok());
-        receive_and_process(mqtt_client);
+        assert_eq!(res.unwrap(), payload);
 
         // Subscribe to the get topic (This is done after sending the set to avoid getting 2 messages)
         let res = paho_client.subscribe(get_topic, 2);
@@ -354,6 +400,7 @@ mod test {
     // Expects an MQTT Broker to be running on localhost:1883
     #[test]
     fn mqtt_messages() {
+        init_files();
         let mut mqttvault = MqttClient::new(
             TCP_ADDR,
             "rusttestcli-tester0",
@@ -401,6 +448,7 @@ mod test {
     // Expects an MQTT Broker to be running on localhost:8883 using the certs in test_data/certs
     #[test]
     fn mqtt_messages_ssl() {
+        init_files();
         let mut mqttvault = MqttClient::new(
             SSL_ADDR,
             "rusttestcli-mqttvault-ssl0",

@@ -1,4 +1,4 @@
-% mqtt_vault(1) Version 0.7.0 | MQTT Vault Manual
+% mqtt_vault(1) Version 0.7.1 | MQTT Vault Manual
 
 [!/]: # (This file is used to generate the man page. Compile it with pandoc:)
 [/!]: # ( pandoc --standalone -t man manpage.md -o mqtt_vault.1 )

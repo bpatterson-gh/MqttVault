@@ -1,7 +1,5 @@
 # MQTT Vault
 
-![mqtt_vault](https://user-images.githubusercontent.com/70041071/162647526-88c839e4-326a-410d-a629-0bbb60dfa032.svg)
-
 A JSON database controlled via MQTT.
 
 ## What it Does
@@ -16,12 +14,12 @@ For details on using the program, please see manpage.md or run **man mqtt_vault*
 The following features are things I plan to add before version 1.0.
 These features will increase the security of the program, but are otherwise not necessary.
 
-#### User filter
-  - Accept or reject commands based on the MQTT user that sent the message
-  - Maybe also filter by client ID?
 #### Database encryption
   - Encrypt the data stored on disk so it can't be accessed without going through MQTT Vault
   - Maybe support using SSL private key as password?
+#### ~~User filter~~ This can't be done since MQTT messages lack sender information.
+  - ~~Accept or reject commands based on the MQTT user that sent the message~~
+  - ~~Maybe also filter by client ID?~~
 
 ## Notes for Contributers
 
