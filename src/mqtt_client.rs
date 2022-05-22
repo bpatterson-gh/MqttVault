@@ -4,8 +4,7 @@
 mod test {
     use crate::MqttClient;
     use paho_mqtt as mqtt;
-    use std::fs::File;
-    use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read};
+    use std::io::{Error as IoError, ErrorKind as IoErrorKind};
     use std::path::Path;
     use std::sync::Once;
     use std::time::Duration;
@@ -54,6 +53,7 @@ mod test {
             true,
             1,
             10,
+            "",
         );
         let res = cli.connect(Some("mqtt_connect"), None, None);
         assert!(res.is_ok());
@@ -72,6 +72,7 @@ mod test {
             true,
             1,
             10,
+            "",
         );
         let res = cli.connect(Some("mqtt_vault_ssl"), None, Some(ssl_options()));
         assert!(res.is_ok());
@@ -90,6 +91,7 @@ mod test {
             true,
             1,
             10,
+            "",
         );
         let res = cli.connect(
             Some("mqtt_vault_ssl_pwd"),
@@ -111,34 +113,45 @@ mod test {
             true,
             1,
             10,
+            "",
         );
         let res = cli.connect(Some("mqtt_noconnect"), None, None);
         assert!(!res.is_ok());
     }
 
     // Convert topic strings to JSON file paths
-    fn topic_to_path(cli: &mut MqttClient, topic_root: &str) {
-        let mut topic = String::from(topic_root);
-        topic.push_str("/set/topic");
+    fn topic_to_path(cli: &mut MqttClient) {
+        let expected_ext: &str;
+        if cli.json_helper.is_encrypted() {
+            expected_ext = "vault";
+        } else {
+            expected_ext = "json";
+        }
+
+        // Simple case
+        let mut topic = String::from(&cli.topic_set);
+        topic.push_str("/topic");
         let path = cli.topic_path(&topic);
         assert!(path.is_ok());
         let path = path.unwrap();
         let mut expected = String::from(&cli.db_root);
-        expected.push_str("/topic.json");
+        expected.push_str("/topic.");
+        expected.push_str(expected_ext);
         assert_eq!(path.to_str().unwrap_or(""), expected);
 
-        let mut topic = String::from(topic_root);
-        topic.push_str("/set/topic/subtopic");
+        // Nested case
+        let mut topic = String::from(&cli.topic_set);
+        topic.push_str("/topic/subtopic");
         let path = cli.topic_path(&topic);
         assert!(path.is_ok());
         let path = path.unwrap();
         let mut expected = String::from(&cli.db_root);
-        expected.push_str("/topic/subtopic.json");
+        expected.push_str("/topic/subtopic.");
+        expected.push_str(expected_ext);
         assert_eq!(path.to_str().unwrap_or(""), expected);
 
-        let mut topic = String::from(topic_root);
-        topic.push_str("/set");
-        let path = cli.topic_path(&topic);
+        // Error case
+        let path = cli.topic_path(&cli.topic_set);
         assert!(!path.is_ok());
     }
 
@@ -154,8 +167,9 @@ mod test {
             true,
             1,
             10,
+            "",
         );
-        topic_to_path(&mut cli, TOPIC_ROOT);
+        topic_to_path(&mut cli);
     }
 
     // Convert topic strings to JSON file paths with a nested root topic "mqttvault/subtopic/get" or "mqttvault/subtopic/set"
@@ -171,8 +185,9 @@ mod test {
             true,
             1,
             10,
+            "",
         );
-        topic_to_path(&mut cli, topic_root);
+        topic_to_path(&mut cli);
         let topic_root = "mqttvault/subtopic/subsub";
         let mut cli = MqttClient::new(
             TCP_ADDR,
@@ -182,15 +197,72 @@ mod test {
             true,
             1,
             10,
+            "",
         );
-        topic_to_path(&mut cli, topic_root);
+        topic_to_path(&mut cli);
+    }
+
+    // Convert topic strings to JSON file paths with a simple root topic "mqttvault/get" or "mqttvault/set"
+    #[test]
+    fn topic_to_path_single_root_encrypted() {
+        init_files();
+        let mut cli = MqttClient::new(
+            TCP_ADDR,
+            "rusttestcli-ttp",
+            TOPIC_ROOT,
+            TEST_DB,
+            true,
+            1,
+            10,
+            "test",
+        );
+        topic_to_path(&mut cli);
+    }
+
+    // Convert topic strings to JSON file paths with a nested root topic "mqttvault/subtopic/get" or "mqttvault/subtopic/set"
+    #[test]
+    fn topic_to_path_nested_root_encrypted() {
+        init_files();
+        let topic_root = "mqttvault/subtopic";
+        let mut cli = MqttClient::new(
+            TCP_ADDR,
+            "rusttestcli-ttp",
+            topic_root,
+            TEST_DB,
+            true,
+            1,
+            10,
+            "test",
+        );
+        topic_to_path(&mut cli);
+        let topic_root = "mqttvault/subtopic/subsub";
+        let mut cli = MqttClient::new(
+            TCP_ADDR,
+            "rusttestcli-ttp",
+            topic_root,
+            TEST_DB,
+            true,
+            1,
+            10,
+            "test",
+        );
+        topic_to_path(&mut cli);
     }
 
     // Update the database on disk for given mqtt topics/payloads
     #[test]
     fn db_updates() {
         init_files();
-        let cli = MqttClient::new(TCP_ADDR, "rusttestcli-db", TOPIC_ROOT, TEST_DB, true, 1, 10);
+        let cli = MqttClient::new(
+            TCP_ADDR,
+            "rusttestcli-db",
+            TOPIC_ROOT,
+            TEST_DB,
+            true,
+            1,
+            10,
+            "",
+        );
         let res = cli.update_db("mqttvault/set/update_db", "\"nice\"");
         assert!(res.is_ok());
 
@@ -263,14 +335,7 @@ mod test {
     // Gets the value on disk for a given client and topic
     fn get_file_contents(mqtt_client: &MqttClient, topic: &str) -> Result<String, IoError> {
         let db_path = mqtt_client.topic_path(topic)?;
-        match File::open(db_path) {
-            Ok(mut file) => {
-                let mut ret = String::new();
-                file.read_to_string(&mut ret)?;
-                Ok(ret)
-            }
-            Err(e) => Err(e),
-        }
+        mqtt_client.json_helper.import_json(&db_path)
     }
 
     // Sends a payload to the set topic and returns the value written to disk
@@ -291,20 +356,23 @@ mod test {
 
     // Simulates a simple interaction where a message is sent to the set topic and read from the get topic
     fn mqtt_simple(mqtt_client: &mut MqttClient, paho_client: &mut mqtt::Client) {
-        let get_topic = "mqttvault/get/simple";
+        let mut get_topic = String::from(&mqtt_client.topic_get);
+        get_topic.push_str("/simple");
+        let mut set_topic = String::from(&mqtt_client.topic_set);
+        set_topic.push_str("/simple");
         let payload = "\"simple_test\"";
         // Subscribe to the get topic
-        let res = paho_client.subscribe(get_topic, 1);
+        let res = paho_client.subscribe(&get_topic, 1);
         assert!(res.is_ok());
         let paho_recv = paho_client.start_consuming();
 
         // Send a set message
-        let res = mqtt_send(mqtt_client, paho_client, "mqttvault/set/simple", payload);
+        let res = mqtt_send(mqtt_client, paho_client, &set_topic, payload);
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), payload);
 
         // Check for a message on the get topic
-        let recv = paho_recv.recv_timeout(Duration::from_millis(1000));
+        let recv = paho_recv.recv_timeout(Duration::from_millis(10000));
         match recv {
             Ok(option) => match option {
                 Some(m) => assert!(m.payload_str() == payload),
@@ -314,30 +382,33 @@ mod test {
         }
 
         // Cleanup
-        let res = paho_client.unsubscribe(get_topic);
+        let res = paho_client.unsubscribe(&get_topic);
         assert!(res.is_ok());
     }
 
     // Simulates a get call with a response topic
     fn mqtt_v5_response(mqtt_client: &mut MqttClient, paho_client: &mut mqtt::Client) {
-        let resp_topic = "mqttvault/resp/v5";
+        let mut set_topic = String::from(&mqtt_client.topic_set);
+        set_topic.push_str("/v5resp");
+        let mut resp_topic = String::from(&mqtt_client.topic_get);
+        resp_topic.push_str("/resp/v5");
         let payload = "\"v5_response_test\"";
         // Subscribe to the response topic
-        let res = paho_client.subscribe(resp_topic, 2);
+        let res = paho_client.subscribe(&resp_topic, 2);
         assert!(res.is_ok());
         let paho_recv = paho_client.start_consuming();
 
         // Send a set message
-        let res = mqtt_send(mqtt_client, paho_client, "mqttvault/set/v5resp", payload);
+        let res = mqtt_send(mqtt_client, paho_client, &set_topic, payload);
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), payload);
 
         // Send a get message with a response topic
         let mut props = mqtt::Properties::new();
-        let res = props.push_string(mqtt::PropertyCode::ResponseTopic, resp_topic);
+        let res = props.push_string(mqtt::PropertyCode::ResponseTopic, &resp_topic);
         assert!(res.is_ok());
         let message = mqtt::MessageBuilder::new()
-            .topic("mqttvault/get")
+            .topic(&mqtt_client.topic_get)
             .payload("v5resp")
             .qos(2)
             .properties(props)
@@ -347,7 +418,7 @@ mod test {
         receive_and_process(mqtt_client);
 
         // Check for a message on the response topic
-        let recv = paho_recv.recv_timeout(Duration::from_millis(1000));
+        let recv = paho_recv.recv_timeout(Duration::from_millis(10000));
         match recv {
             Ok(option) => match option {
                 Some(m) => assert!(m.payload_str() == payload),
@@ -357,32 +428,35 @@ mod test {
         }
 
         // Cleanup
-        let res = paho_client.unsubscribe(resp_topic);
+        let res = paho_client.unsubscribe(&resp_topic);
         assert!(res.is_ok());
     }
 
     // Simulates a get call without a response topic
     fn mqtt_fallback_response(mqtt_client: &mut MqttClient, paho_client: &mut mqtt::Client) {
-        let get_topic = "mqttvault/get/fallback";
+        let mut get_topic = String::from(&mqtt_client.topic_get);
+        get_topic.push_str("/fallback");
+        let mut set_topic = String::from(&mqtt_client.topic_set);
+        set_topic.push_str("/fallback");
         let payload = "\"fallback_response_test\"";
         // Send a set message
-        let res = mqtt_send(mqtt_client, paho_client, "mqttvault/set/fallback", payload);
+        let res = mqtt_send(mqtt_client, paho_client, &set_topic, payload);
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), payload);
 
         // Subscribe to the get topic (This is done after sending the set to avoid getting 2 messages)
-        let res = paho_client.subscribe(get_topic, 2);
+        let res = paho_client.subscribe(&get_topic, 2);
         assert!(res.is_ok());
         let paho_recv = paho_client.start_consuming();
 
         // Send a get message without a response topic
-        let message = mqtt::Message::new("mqttvault/get", "fallback", 2);
+        let message = mqtt::Message::new(&mqtt_client.topic_get, "fallback", 2);
         let res = paho_client.publish(message);
         assert!(res.is_ok());
         receive_and_process(mqtt_client);
 
         // Check for a message on the get topic
-        let recv = paho_recv.recv_timeout(Duration::from_millis(1000));
+        let recv = paho_recv.recv_timeout(Duration::from_millis(10000));
         match recv {
             Ok(option) => match option {
                 Some(m) => assert!(m.payload_str() == payload),
@@ -392,7 +466,7 @@ mod test {
         }
 
         // Cleanup
-        let res = paho_client.unsubscribe(get_topic);
+        let res = paho_client.unsubscribe(&get_topic);
         assert!(res.is_ok());
     }
 
@@ -401,14 +475,17 @@ mod test {
     #[test]
     fn mqtt_messages() {
         init_files();
+        let mut topic_root = String::from(TOPIC_ROOT);
+        topic_root.push_str("mqtt_messages");
         let mut mqttvault = MqttClient::new(
             TCP_ADDR,
             "rusttestcli-tester0",
-            TOPIC_ROOT,
+            &topic_root,
             TEST_DB,
             true,
             1,
             10,
+            "",
         );
         let res = mqttvault.connect(Some("mqtt_vault_tester0"), None, None);
         assert!(res.is_ok());
@@ -418,11 +495,12 @@ mod test {
         let mut mqttvault = MqttClient::new(
             TCP_ADDR,
             "rusttestcli-tester1",
-            TOPIC_ROOT,
+            &topic_root,
             TEST_DB,
             true,
             1,
             10,
+            "",
         );
         let res = mqttvault.connect(Some("mqtt_vault_tester1"), None, None);
         assert!(res.is_ok());
@@ -432,11 +510,12 @@ mod test {
         let mut mqttvault = MqttClient::new(
             TCP_ADDR,
             "rusttestcli-tester2",
-            TOPIC_ROOT,
+            &topic_root,
             TEST_DB,
             false,
             1,
             10,
+            "",
         );
         let res = mqttvault.connect(Some("mqtt_vault_tester2"), None, None);
         assert!(res.is_ok());
@@ -449,14 +528,17 @@ mod test {
     #[test]
     fn mqtt_messages_ssl() {
         init_files();
+        let mut topic_root = String::from(TOPIC_ROOT);
+        topic_root.push_str("mqtt_messages_ssl");
         let mut mqttvault = MqttClient::new(
             SSL_ADDR,
             "rusttestcli-mqttvault-ssl0",
-            TOPIC_ROOT,
+            &topic_root,
             TEST_DB,
             true,
             1,
             10,
+            "",
         );
         let res = mqttvault.connect(Some("mqtt_vault_tester_ssl0"), None, Some(ssl_options()));
         assert!(res.is_ok());
@@ -466,11 +548,12 @@ mod test {
         let mut mqttvault = MqttClient::new(
             SSL_ADDR,
             "rusttestcli-mqttvault-ssl1",
-            TOPIC_ROOT,
+            &topic_root,
             TEST_DB,
             true,
             1,
             10,
+            "",
         );
         let res = mqttvault.connect(Some("mqtt_vault_tester_ssl1"), None, Some(ssl_options()));
         assert!(res.is_ok());
@@ -480,21 +563,76 @@ mod test {
         let mut mqttvault = MqttClient::new(
             SSL_ADDR,
             "rusttestcli-mqttvault-ssl2",
-            TOPIC_ROOT,
+            &topic_root,
             TEST_DB,
             false,
             1,
             10,
+            "",
         );
         let res = mqttvault.connect(Some("mqtt_vault_tester_ssl2"), None, Some(ssl_options()));
         assert!(res.is_ok());
         let mut paho_client = create_paho_client_ssl("mqtt_vault_client_ssl_fallback");
         mqtt_fallback_response(&mut mqttvault, &mut paho_client);
     }
+
+    // Integration test: process encrypted messages and verify the responses
+    // Expects an MQTT Broker to be running on localhost:1883
+    #[test]
+    fn mqtt_messages_encrypted() {
+        init_files();
+        let mut topic_root = String::from(TOPIC_ROOT);
+        topic_root.push_str("mqtt_messages_encrypted");
+        let mut mqttvault = MqttClient::new(
+            TCP_ADDR,
+            "rusttestcli-tester0-crypt",
+            &topic_root,
+            TEST_DB,
+            true,
+            1,
+            10,
+            "test",
+        );
+        let res = mqttvault.connect(Some("mqtt_vault_tester0-crypt"), None, None);
+        assert!(res.is_ok());
+        let mut paho_client = create_paho_client("mqtt_vault_client_simple-crypt");
+        mqtt_simple(&mut mqttvault, &mut paho_client);
+
+        let mut mqttvault = MqttClient::new(
+            TCP_ADDR,
+            "rusttestcli-tester1-crypt",
+            &topic_root,
+            TEST_DB,
+            true,
+            1,
+            10,
+            "test",
+        );
+        let res = mqttvault.connect(Some("mqtt_vault_tester1-crypt"), None, None);
+        assert!(res.is_ok());
+        let mut paho_client = create_paho_client("mqtt_vault_client_v5resp-crypt");
+        mqtt_v5_response(&mut mqttvault, &mut paho_client);
+
+        let mut mqttvault = MqttClient::new(
+            TCP_ADDR,
+            "rusttestcli-tester2-crypt",
+            &topic_root,
+            TEST_DB,
+            false,
+            1,
+            10,
+            "test",
+        );
+        let res = mqttvault.connect(Some("mqtt_vault_tester2-crypt"), None, None);
+        assert!(res.is_ok());
+        let mut paho_client = create_paho_client("mqtt_vault_client_fallback-crypt");
+        mqtt_fallback_response(&mut mqttvault, &mut paho_client);
+    }
 }
 
-use crate::json_helper::*;
+mod json_helper;
 use crossbeam_channel::RecvTimeoutError;
+use json_helper::JsonHelper;
 use mqtt::message::Message;
 use mqtt::server_response::ServerResponse;
 use mqtt::Receiver;
@@ -506,6 +644,7 @@ use std::time::{Duration, Instant};
 pub struct MqttClient {
     client: mqtt::AsyncClient,
     db_root: String,
+    json_helper: JsonHelper,
     receiver: Receiver<Option<Message>>,
     receiver_timeout: Duration,
     retry_attempts: i32,
@@ -528,6 +667,7 @@ impl MqttClient {
         attempt_v5: bool,
         retry_attempts_max: i32,
         retry_cooldown: u64,
+        file_crypt_key: &str,
     ) -> MqttClient {
         let (client, v5) = MqttClient::mqtt_create(server_uri, client_id, attempt_v5);
         let recv = client.start_consuming();
@@ -538,6 +678,7 @@ impl MqttClient {
         MqttClient {
             client,
             db_root: String::from(db_root),
+            json_helper: JsonHelper::new(file_crypt_key),
             receiver: recv,
             receiver_timeout: Duration::from_millis(250),
             retry_attempts: 0,
@@ -627,7 +768,11 @@ impl MqttClient {
             file.push('/');
         }
         file.push_str(v[v.len() - 1]);
-        file.push_str(".json");
+        if self.json_helper.is_encrypted() {
+            file.push_str(".vault");
+        } else {
+            file.push_str(".json");
+        }
         Ok(PathBuf::from(&file))
     }
 
@@ -635,10 +780,10 @@ impl MqttClient {
     fn update_db(&self, topic: &str, payload: &str) -> Result<(), IoError> {
         match json::parse(payload) {
             Ok(json_payload) => match self.topic_path(topic) {
-                Ok(path) => export_json(path, json_payload),
+                Ok(path) => self.json_helper.export_json(&path, json_payload),
                 Err(e) => Err(e),
             },
-            Err(e) => Err(json_to_io_error(e, Some(payload))),
+            Err(e) => Err(self.json_helper.json_to_io_error(e, Some(payload))),
         }
     }
 
@@ -666,7 +811,7 @@ impl MqttClient {
     fn send_v5_get_response(&self, topic: &str, resp_topic: &str) {
         let message: Message;
         match self.topic_path(topic) {
-            Ok(payload_path) => match import_json(payload_path) {
+            Ok(payload_path) => match self.json_helper.import_json(&payload_path) {
                 Ok(payload) => message = Message::new(resp_topic, payload, 1),
                 Err(e) => {
                     eprintln!("Error while preparing v5 response: {}", e);
@@ -692,7 +837,7 @@ impl MqttClient {
         println!("Sending fallback get for {}", topic);
         let mut payload: Option<String> = None;
         match self.topic_path(topic) {
-            Ok(path) => match import_json(path) {
+            Ok(path) => match self.json_helper.import_json(&path) {
                 Ok(j) => payload = Some(j),
                 Err(e) => eprintln!("Error while preparing fallback response: {}", e),
             },

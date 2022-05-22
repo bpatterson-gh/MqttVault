@@ -24,6 +24,7 @@ mod test {
     static VALID_CONF_DB_ROOT: &str = "fake/db";
     static VALID_CONF_MAX_RETRIES: i32 = 2;
     static VALID_CONF_RETRY_INTERVAL: u64 = 10;
+    static VALID_CONF_FILE_CRYPT_KEY: &str = "s00pers3cure";
 
     // Initialize test files
     static INIT_FILES: Once = Once::new();
@@ -61,6 +62,7 @@ mod test {
             "retry-interval = {}\n",
             VALID_CONF_RETRY_INTERVAL
         ));
+        s.push_str("file-crypt-key = s00pers3cure \n");
         s.push_str("mqtt-v5 = fAlSe \n");
         s
     }
@@ -83,6 +85,7 @@ mod test {
         assert_eq!(args.db_root, VALID_CONF_DB_ROOT);
         assert_eq!(args.max_retries, VALID_CONF_MAX_RETRIES);
         assert_eq!(args.retry_interval, VALID_CONF_RETRY_INTERVAL);
+        assert_eq!(args.file_crypt_key, VALID_CONF_FILE_CRYPT_KEY);
         assert_eq!(args.mqtt_v5, false);
 
         let mqtt_client = start_client(args);
@@ -140,6 +143,7 @@ mod test {
         std::env::set_var("MQTTV_CAFILE", VALID_CONF_CA_FILE);
         std::env::set_var("MQTTV_DBROOT", VALID_CONF_DB_ROOT);
         std::env::set_var("MQTTV_CERTFILE", VALID_CONF_CERT_FILE);
+        std::env::set_var("MQTTV_FILECRYPTKEY", VALID_CONF_FILE_CRYPT_KEY);
         std::env::set_var("MQTTV_CLIENTID", VALID_CONF_CLIENT_ID);
         std::env::set_var("MQTTV_KEYFILE", VALID_CONF_KEY_FILE);
         std::env::set_var("MQTTV_MAXRETRIES", VALID_CONF_MAX_RETRIES.to_string());
@@ -156,6 +160,7 @@ mod test {
         assert_eq!(args.ca_file, VALID_CONF_CA_FILE);
         assert_eq!(args.db_root, VALID_CONF_DB_ROOT);
         assert_eq!(args.cert_file, VALID_CONF_CERT_FILE);
+        assert_eq!(args.file_crypt_key, VALID_CONF_FILE_CRYPT_KEY);
         assert_eq!(args.client_id, VALID_CONF_CLIENT_ID);
         assert_eq!(args.key_file, VALID_CONF_KEY_FILE);
         assert_eq!(args.max_retries, VALID_CONF_MAX_RETRIES);
@@ -178,6 +183,8 @@ mod test {
         cli_args.push(String::from(VALID_CONF_DB_ROOT));
         cli_args.push(String::from("-e"));
         cli_args.push(String::from(VALID_CONF_CERT_FILE));
+        cli_args.push(String::from("-f"));
+        cli_args.push(String::from(VALID_CONF_FILE_CRYPT_KEY));
         cli_args.push(String::from("-i"));
         cli_args.push(String::from(VALID_CONF_CLIENT_ID));
         cli_args.push(String::from("-k"));
@@ -202,6 +209,7 @@ mod test {
         assert_eq!(args.ca_file, VALID_CONF_CA_FILE);
         assert_eq!(args.db_root, VALID_CONF_DB_ROOT);
         assert_eq!(args.cert_file, VALID_CONF_CERT_FILE);
+        assert_eq!(args.file_crypt_key, VALID_CONF_FILE_CRYPT_KEY);
         assert_eq!(args.client_id, VALID_CONF_CLIENT_ID);
         assert_eq!(args.key_file, VALID_CONF_KEY_FILE);
         assert_eq!(args.max_retries, VALID_CONF_MAX_RETRIES);
@@ -224,6 +232,8 @@ mod test {
         cli_args.push(String::from(VALID_CONF_DB_ROOT));
         cli_args.push(String::from("--cert-file"));
         cli_args.push(String::from(VALID_CONF_CERT_FILE));
+        cli_args.push(String::from("--file-crypt-key"));
+        cli_args.push(String::from(VALID_CONF_FILE_CRYPT_KEY));
         cli_args.push(String::from("--client-id"));
         cli_args.push(String::from(VALID_CONF_CLIENT_ID));
         cli_args.push(String::from("--key-file"));
@@ -248,6 +258,7 @@ mod test {
         assert_eq!(args.ca_file, VALID_CONF_CA_FILE);
         assert_eq!(args.db_root, VALID_CONF_DB_ROOT);
         assert_eq!(args.cert_file, VALID_CONF_CERT_FILE);
+        assert_eq!(args.file_crypt_key, VALID_CONF_FILE_CRYPT_KEY);
         assert_eq!(args.client_id, VALID_CONF_CLIENT_ID);
         assert_eq!(args.key_file, VALID_CONF_KEY_FILE);
         assert_eq!(args.max_retries, VALID_CONF_MAX_RETRIES);
@@ -288,7 +299,6 @@ mod test {
     }
 }
 
-mod json_helper;
 mod mqtt_client;
 use mqtt_client::MqttClient;
 use paho_mqtt::{SslOptions, SslOptionsBuilder};
@@ -311,6 +321,7 @@ struct Arguments {
     mqtt_v5: bool,
     max_retries: i32,
     retry_interval: u64,
+    file_crypt_key: String,
 }
 
 impl Arguments {
@@ -330,6 +341,7 @@ impl Arguments {
             mqtt_v5: true,
             max_retries: -1,
             retry_interval: 30,
+            file_crypt_key: String::from("1"),
         }
     }
 
@@ -381,6 +393,7 @@ impl Arguments {
                                 "cert-file" => args.cert_file(&f_args[i + 1]),
                                 "client-id" => args.client_id(&f_args[i + 1]),
                                 "db-root" => args.db_root(&f_args[i + 1]),
+                                "file-crypt-key" => args.file_crypt_key(&f_args[i + 1]),
                                 "key-file" => args.key_file(&f_args[i + 1]),
                                 "max-retries" => args.max_retries(&f_args[i + 1]),
                                 "mqtt-v5" => match f_args[i + 1].to_lowercase().as_str() {
@@ -466,6 +479,11 @@ impl Arguments {
         }
         self
     }
+
+    pub fn file_crypt_key(&mut self, file_crypt_key: &str) -> &mut Self {
+        self.file_crypt_key = String::from(file_crypt_key);
+        self
+    }
 }
 
 // Apply environment variables
@@ -476,6 +494,7 @@ fn process_env_vars(env_vars: std::env::Vars, args: &mut Arguments) {
             "MQTTV_CAFILE" => args.ca_file(&val),
             "MQTTV_DBROOT" => args.db_root(&val),
             "MQTTV_CERTFILE" => args.cert_file(&val),
+            "MQTTV_FILECRYPTKEY" => args.file_crypt_key(&val),
             "MQTTV_CLIENTID" => args.client_id(&val),
             "MQTTV_KEYFILE" => args.key_file(&val),
             "MQTTV_MAXRETRIES" => args.max_retries(&val),
@@ -500,6 +519,7 @@ fn process_cli_args(cli_args: Vec<String>, args: &mut Arguments) {
             "-c" | "--ca-file" => args.ca_file(&cli_args[i + 1]),
             "-d" | "--db-root" => args.db_root(&cli_args[i + 1]),
             "-e" | "--cert-file" => args.cert_file(&cli_args[i + 1]),
+            "-f" | "--file-crypt-key" => args.file_crypt_key(&cli_args[i + 1]),
             "-i" | "--client-id" => args.client_id(&cli_args[i + 1]),
             "-k" | "--key-file" => args.key_file(&cli_args[i + 1]),
             "-m" | "--max-retries" => args.max_retries(&cli_args[i + 1]),
@@ -544,6 +564,7 @@ fn start_client(args: Arguments) -> Result<MqttClient, String> {
         args.mqtt_v5,
         args.max_retries,
         args.retry_interval,
+        &args.file_crypt_key,
     );
     let user = if args.user == "" {
         None

@@ -53,3 +53,10 @@
 # retry-interval - Number of seconds to wait before attempting to reconnect to the broker
 # Default is 30
 #retry-interval = 30
+
+# file-crypt-key - Password to encrypt the JSON files with
+# If this is not defined, the database will not be encrypted
+# MQTT Vault cannot make use of encrypted and unencrypted files at the same time,
+# but they will not overwrite each other if placed in the same db-root
+# Max length is 32 characters
+#file-crypt-key = long_random_password

@@ -1,6 +1,6 @@
 [package]
 name = "mqtt_vault"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["Bruce Patterson"]
 edition = "2021"
 description = "JSON database controlled via MQTT"
@@ -14,8 +14,11 @@ categories = ["command-line-utilities"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+chacha20poly1305 = "0.9.0"
 crossbeam-channel = "0.5.4"
 ctrlc = {version = "3.2.2", features = ["termination"] }
+hmac = "0.12.1"
 json = "0.12.4"
 paho-mqtt = "0.11.1"
+sha3 = "0.10.1"
 uuid = { version = "1.0.0", features = ["v4"] }

@@ -1,4 +1,4 @@
-% mqtt_vault(1) Version 0.7.1 | MQTT Vault Manual
+% mqtt_vault(1) Version 0.8 | MQTT Vault Manual
 
 [!/]: # (This file is used to generate the man page. Compile it with pandoc:)
 [/!]: # ( pandoc --standalone -t man manpage.md -o mqtt_vault.1 )
@@ -56,6 +56,18 @@ Most options can also be controlled via environment variables.
   Default: *none*
 
   Environment variable: **MQTTV_CERTFILE**
+
+## -f, \--file-crypt-key *[string]*
+
+  Password to encrypt the JSON files with. If this is *none*, the database will not be encrypted.
+  
+  MQTT Vault cannot make use of encrypted and unencrypted files at the same time, but they will not overwrite each other if placed in the same **\--db-root**.
+
+  Max length is 32 characters.
+
+  Default: *none*
+
+  Environment variable: **MQTTV_FILECRYPTKEY**
 
 ## -i, \--client-id  *[string]*
 

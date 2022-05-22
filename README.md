@@ -14,9 +14,11 @@ For details on using the program, please see manpage.md or run **man mqtt_vault*
 The following features are things I plan to add before version 1.0.
 These features will increase the security of the program, but are otherwise not necessary.
 
-#### Database encryption
-  - Encrypt the data stored on disk so it can't be accessed without going through MQTT Vault
-  - Maybe support using SSL private key as password?
+#### Database encryption - In progress
+  - Encrypt the data stored on disk so it can't be accessed without going through MQTT Vault ✅
+  - ~~Maybe support using SSL private key as password?~~ Decided against this since certs can get replaced frequently
+  - Add a mechanism to change the encryption key
+  - Add a mechanism to migrate between encrypted and unencrypted DBs
 #### ~~User filter~~ This can't be done since MQTT messages lack sender information.
   - ~~Accept or reject commands based on the MQTT user that sent the message~~
   - ~~Maybe also filter by client ID?~~
