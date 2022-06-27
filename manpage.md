@@ -71,7 +71,7 @@ Most options can also be controlled via environment variables.
 
 ## \--change-crypt-key
 
-  Allows an encryption key to be changed, added, or removed. Ignores all other arguments except **\--file-crypt-key**.
+  Allows an encryption key to be changed, added, or removed. Ignores all other arguments except **\--db-root** and **\--file-crypt-key**.
   
   This will overwrite the current database if there are no errors.
 
