@@ -1,5 +1,6 @@
 Cargo.lock
 target
+test_data/cck_db
 test_data/conf
 test_data/db
 test_data/json

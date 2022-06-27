@@ -84,8 +84,10 @@ mod test {
     #[test]
     fn write_json_correct() {
         let json_helper = JsonHelper::new("");
-        let res =
-            json_helper.export_json(&PathBuf::from(JSON_PATH_CORRECT_WRITE), json_data_correct());
+        let res = json_helper.export_json(
+            &PathBuf::from(JSON_PATH_CORRECT_WRITE),
+            &json_data_correct(),
+        );
         assert!(res.is_ok());
     }
 
@@ -94,8 +96,7 @@ mod test {
     fn read_write_crypt_json() {
         init_files();
         let json_helper = JsonHelper::new("test");
-        let res =
-            json_helper.export_json(&PathBuf::from(CRYPT_PATH_READ_WRITE), json_data_correct());
+        let res = json_helper.export_json(&PathBuf::from(CRYPT_PATH_READ_WRITE), &json_data_correct());
         assert!(res.is_ok());
         let data = json_helper.import_json(&PathBuf::from(CRYPT_PATH_READ_WRITE));
         if !data.is_ok() {
@@ -109,7 +110,8 @@ mod test {
 
 mod file_encryption;
 use file_encryption::Crypter;
-use json::{JsonError, JsonValue};
+use json::JsonError;
+pub use json::JsonValue;
 use std::fs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::path::PathBuf;
@@ -134,7 +136,15 @@ impl JsonHelper {
         let fdata: String;
         if self.is_encrypted() {
             match fs::read(file) {
-                Ok(bdata) => fdata = self.crypter.as_ref().unwrap().decrypt(&bdata),
+                Ok(bdata) => match self.crypter.as_ref().unwrap().decrypt(&bdata) {
+                    Ok(fd) => fdata = fd,
+                    Err(e) => {
+                        return Err(IoError::new(
+                            IoErrorKind::Other,
+                            format!("Failed to decrypt {}. {}", &file.display(), e),
+                        ))
+                    }
+                },
                 Err(e) => {
                     if e.kind() == IoErrorKind::NotFound {
                         fdata = fs::read_to_string(&file)?;
@@ -146,24 +156,22 @@ impl JsonHelper {
         } else {
             fdata = fs::read_to_string(&file)?;
         }
-        let jdata = json::parse(&fdata);
-        if jdata.is_ok() {
-            Ok(json::stringify(jdata.unwrap()))
-        } else {
-            Err(IoError::new(
+        match json::parse(&fdata) {
+            Ok(data) => Ok(json::stringify(data)),
+            Err(e) => Err(IoError::new(
                 IoErrorKind::Other,
                 format!(
-                    "JSON file {} is corrupted: {}",
-                    file.to_str().unwrap_or("\"\""),
-                    &fdata
+                    "Failed to decrypt {}. {}",
+                    &file.display(),
+                    self.json_to_io_error(e, Some(&fdata))
                 ),
-            ))
+            )),
         }
     }
 
     // Try to write a JsonValue to a file
     // Will not write to disk unless the new value is different
-    pub fn export_json(&self, file: &PathBuf, obj: JsonValue) -> Result<(), IoError> {
+    pub fn export_json(&self, file: &PathBuf, obj: &JsonValue) -> Result<(), IoError> {
         let old_val = self.import_json(file).unwrap_or(String::new());
         let new_val = obj.dump();
         if old_val == new_val {
@@ -173,7 +181,13 @@ impl JsonHelper {
             Some(parent) => {
                 fs::create_dir_all(parent)?;
                 if self.is_encrypted() {
-                    fs::write(file, self.crypter.as_ref().unwrap().encrypt(file, &new_val))
+                    match self.crypter.as_ref().unwrap().encrypt(file, &new_val) {
+                        Ok(data) => fs::write(file, data),
+                        Err(e) => Err(IoError::new(
+                            IoErrorKind::Other,
+                            format!("Failed to encrypt {}. {}", &file.display(), e),
+                        )),
+                    }
                 } else {
                     fs::write(file, new_val)
                 }
@@ -203,9 +217,7 @@ impl JsonHelper {
                 IoErrorKind::Other,
                 format!("JSON depth limit exceeded: {}", j),
             ),
-            JsonError::WrongType(t) => {
-                IoError::new(IoErrorKind::Other, format!("Wrong type: {} in {}", t, j))
-            }
+            JsonError::WrongType(t) => IoError::new(IoErrorKind::Other, format!("Wrong type: {} in {}", t, j)),
         }
     }
 

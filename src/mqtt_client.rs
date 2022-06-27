@@ -54,7 +54,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = cli.connect(Some("mqtt_connect"), None, None);
         assert!(res.is_ok());
     }
@@ -73,7 +74,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = cli.connect(Some("mqtt_vault_ssl"), None, Some(ssl_options()));
         assert!(res.is_ok());
     }
@@ -92,7 +94,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = cli.connect(
             Some("mqtt_vault_ssl_pwd"),
             Some("test"),
@@ -114,7 +117,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = cli.connect(Some("mqtt_noconnect"), None, None);
         assert!(!res.is_ok());
     }
@@ -168,7 +172,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         topic_to_path(&mut cli);
     }
 
@@ -186,7 +191,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         topic_to_path(&mut cli);
         let topic_root = "mqttvault/subtopic/subsub";
         let mut cli = MqttClient::new(
@@ -198,7 +204,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         topic_to_path(&mut cli);
     }
 
@@ -215,7 +222,8 @@ mod test {
             1,
             10,
             "test",
-        );
+        )
+        .unwrap();
         topic_to_path(&mut cli);
     }
 
@@ -233,7 +241,8 @@ mod test {
             1,
             10,
             "test",
-        );
+        )
+        .unwrap();
         topic_to_path(&mut cli);
         let topic_root = "mqttvault/subtopic/subsub";
         let mut cli = MqttClient::new(
@@ -245,7 +254,8 @@ mod test {
             1,
             10,
             "test",
-        );
+        )
+        .unwrap();
         topic_to_path(&mut cli);
     }
 
@@ -262,7 +272,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = cli.update_db("mqttvault/set/update_db", "\"nice\"");
         assert!(res.is_ok());
 
@@ -486,7 +497,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester0"), None, None);
         assert!(res.is_ok());
         let mut paho_client = create_paho_client("mqtt_vault_client_simple");
@@ -501,7 +513,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester1"), None, None);
         assert!(res.is_ok());
         let mut paho_client = create_paho_client("mqtt_vault_client_v5resp");
@@ -516,7 +529,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester2"), None, None);
         assert!(res.is_ok());
         let mut paho_client = create_paho_client("mqtt_vault_client_fallback");
@@ -539,7 +553,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester_ssl0"), None, Some(ssl_options()));
         assert!(res.is_ok());
         let mut paho_client = create_paho_client_ssl("mqtt_vault_client_ssl_simple");
@@ -554,7 +569,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester_ssl1"), None, Some(ssl_options()));
         assert!(res.is_ok());
         let mut paho_client = create_paho_client_ssl("mqtt_vault_client_ssl_v5resp");
@@ -569,7 +585,8 @@ mod test {
             1,
             10,
             "",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester_ssl2"), None, Some(ssl_options()));
         assert!(res.is_ok());
         let mut paho_client = create_paho_client_ssl("mqtt_vault_client_ssl_fallback");
@@ -592,7 +609,8 @@ mod test {
             1,
             10,
             "test",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester0-crypt"), None, None);
         assert!(res.is_ok());
         let mut paho_client = create_paho_client("mqtt_vault_client_simple-crypt");
@@ -607,7 +625,8 @@ mod test {
             1,
             10,
             "test",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester1-crypt"), None, None);
         assert!(res.is_ok());
         let mut paho_client = create_paho_client("mqtt_vault_client_v5resp-crypt");
@@ -622,7 +641,8 @@ mod test {
             1,
             10,
             "test",
-        );
+        )
+        .unwrap();
         let res = mqttvault.connect(Some("mqtt_vault_tester2-crypt"), None, None);
         assert!(res.is_ok());
         let mut paho_client = create_paho_client("mqtt_vault_client_fallback-crypt");
@@ -630,7 +650,7 @@ mod test {
     }
 }
 
-mod json_helper;
+pub mod json_helper;
 use crossbeam_channel::RecvTimeoutError;
 use json_helper::JsonHelper;
 use mqtt::message::Message;
@@ -668,14 +688,14 @@ impl MqttClient {
         retry_attempts_max: i32,
         retry_cooldown: u64,
         file_crypt_key: &str,
-    ) -> MqttClient {
-        let (client, v5) = MqttClient::mqtt_create(server_uri, client_id, attempt_v5);
+    ) -> Result<MqttClient, String> {
+        let (client, v5) = MqttClient::mqtt_create(server_uri, client_id, attempt_v5)?;
         let recv = client.start_consuming();
         let mut get = String::from(topic_root);
         get.push_str("/get");
         let mut set = String::from(topic_root);
         set.push_str("/set");
-        MqttClient {
+        Ok(MqttClient {
             client,
             db_root: String::from(db_root),
             json_helper: JsonHelper::new(file_crypt_key),
@@ -689,15 +709,11 @@ impl MqttClient {
             topic_set: set,
             topic_sections: topic_root.split('/').count() + 1,
             v5,
-        }
+        })
     }
 
     // Create a paho AsyncClient and set the MQTT version
-    fn mqtt_create(
-        server_uri: &str,
-        client_id: &str,
-        attempt_v5: bool,
-    ) -> (mqtt::AsyncClient, bool) {
+    fn mqtt_create(server_uri: &str, client_id: &str, attempt_v5: bool) -> Result<(mqtt::AsyncClient, bool), String> {
         if attempt_v5 {
             let v5_opts = mqtt::CreateOptionsBuilder::new()
                 .server_uri(server_uri)
@@ -705,7 +721,7 @@ impl MqttClient {
                 .mqtt_version(5);
             match mqtt::AsyncClient::new(v5_opts.finalize()) {
                 Ok(client) => {
-                    return (client, true);
+                    return Ok((client, true));
                 }
                 Err(_) => (),
             }
@@ -713,8 +729,10 @@ impl MqttClient {
         let opts = mqtt::CreateOptionsBuilder::new()
             .server_uri(server_uri)
             .client_id(client_id);
-        let client = mqtt::AsyncClient::new(opts.finalize()).expect("Failed to create paho client");
-        (client, false)
+        match mqtt::AsyncClient::new(opts.finalize()) {
+            Ok(client) => Ok((client, false)),
+            Err(e) => Err(format!("Failed to create paho client: {}", e)),
+        }
     }
 
     // Connect to an MQTT broker and subscribe to topic_set & topic_get
@@ -780,7 +798,7 @@ impl MqttClient {
     fn update_db(&self, topic: &str, payload: &str) -> Result<(), IoError> {
         match json::parse(payload) {
             Ok(json_payload) => match self.topic_path(topic) {
-                Ok(path) => self.json_helper.export_json(&path, json_payload),
+                Ok(path) => self.json_helper.export_json(&path, &json_payload),
                 Err(e) => Err(e),
             },
             Err(e) => Err(self.json_helper.json_to_io_error(e, Some(payload))),
@@ -834,7 +852,6 @@ impl MqttClient {
     // Send a response to all subscribers when topic_get is queried
     // Ideally, the MQTT v5 response topic should be used instead
     fn send_fallback_get_response(&self, topic: &str) {
-        println!("Sending fallback get for {}", topic);
         let mut payload: Option<String> = None;
         match self.topic_path(topic) {
             Ok(path) => match self.json_helper.import_json(&path) {
@@ -876,8 +893,7 @@ impl MqttClient {
     // Process an incoming MQTT message
     fn process_message(&self, message: Message) {
         let topic = message.topic();
-        if topic.len() >= self.topic_set.len() && &topic[..self.topic_set.len()] == &self.topic_set
-        {
+        if topic.len() >= self.topic_set.len() && &topic[..self.topic_set.len()] == &self.topic_set {
             self.process_set(topic, &message.payload_str());
         } else if topic.len() >= self.topic_get.len() && &message.topic() == &self.topic_get {
             self.process_get(message);
@@ -902,9 +918,7 @@ impl MqttClient {
 
     // Process messages and make sure the MQTT connection stays up
     pub fn main_loop(&mut self) -> bool {
-        if self.retry_instant.is_some()
-            && self.retry_instant.unwrap().elapsed().as_secs() >= self.retry_cooldown
-        {
+        if self.retry_instant.is_some() && self.retry_instant.unwrap().elapsed().as_secs() >= self.retry_cooldown {
             match self.client.reconnect().wait() {
                 Ok(_) => {
                     self.retry_instant = None;
@@ -914,9 +928,7 @@ impl MqttClient {
                 Err(_) => {
                     println!("Reconnection attempt failed");
                     self.retry_attempts += 1;
-                    if self.retry_attempts_max > -1
-                        && self.retry_attempts >= self.retry_attempts_max
-                    {
+                    if self.retry_attempts_max > -1 && self.retry_attempts >= self.retry_attempts_max {
                         eprintln!("Failed to reconnect after {} attempts", self.retry_attempts);
                         return false;
                     } else {

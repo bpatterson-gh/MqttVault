@@ -1,6 +1,6 @@
 [package]
 name = "mqtt_vault"
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Bruce Patterson"]
 edition = "2021"
 description = "JSON database controlled via MQTT"
@@ -20,5 +20,6 @@ ctrlc = {version = "3.2.2", features = ["termination"] }
 hmac = "0.12.1"
 json = "0.12.4"
 paho-mqtt = "0.11.1"
+rpassword = "6.0.1"
 sha3 = "0.10.1"
 uuid = { version = "1.0.0", features = ["v4"] }

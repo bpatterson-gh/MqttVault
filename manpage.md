@@ -1,4 +1,4 @@
-% mqtt_vault(1) Version 0.8 | MQTT Vault Manual
+% mqtt_vault(1) Version 0.9 | MQTT Vault Manual
 
 [!/]: # (This file is used to generate the man page. Compile it with pandoc:)
 [/!]: # ( pandoc --standalone -t man manpage.md -o mqtt_vault.1 )
@@ -59,15 +59,23 @@ Most options can also be controlled via environment variables.
 
 ## -f, \--file-crypt-key *[string]*
 
-  Password to encrypt the JSON files with. If this is *none*, the database will not be encrypted.
+  Password to encrypt the JSON files with. If this is *none*, the database will not be encrypted. Setting this to *STDIN* will cause an interactive prompt to appear.
   
-  MQTT Vault cannot make use of encrypted and unencrypted files at the same time, but they will not overwrite each other if placed in the same **\--db-root**.
+  MQTT Vault cannot make use of encrypted and unencrypted files at the same time, but they will not overwrite each other if placed in the same **\--db-root**. However, using **\--change-crypt-key** to add or remove encryption will overwrite the files it converts.
 
   Max length is 32 characters.
 
   Default: *none*
 
   Environment variable: **MQTTV_FILECRYPTKEY**
+
+## \--change-crypt-key
+
+  Allows an encryption key to be changed, added, or removed. Ignores all other arguments except **\--file-crypt-key**.
+  
+  This will overwrite the current database if there are no errors.
+
+  An interactive prompt will appear to collect the necessary information. If **\--file-crypt-key** is specified, it will be used as the current key and the user will only have to enter a new key. After the data is converted, the program will halt.
 
 ## -i, \--client-id  *[string]*
 
@@ -139,7 +147,23 @@ Most options can also be controlled via environment variables.
 
   Environment variable: **MQTTV_USER**
 
-## -v, \--mqtt-v5  *[boolean]*
+## -v3
+
+  Connect with MQTT v3 instead of v5.
+
+  MQTT v3 has a limited featureset and isn't recommended.
+
+  Environment variable: **MQTTV_V5** = [*false*/*0*/*N*]
+
+## -v5
+
+  Connect with MQTT v5. This is the default behavior.
+
+  Environment variable: **MQTTV_V5** = [*true*/*1*/*Y*]
+
+## DEPRECATED -v, \--mqtt-v5  *[boolean]*
+
+  This is deprecated. Use **-v3** or **-v5** instead
 
   Connect with MQTT v5.
 

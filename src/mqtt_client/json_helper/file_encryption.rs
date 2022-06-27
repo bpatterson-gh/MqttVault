@@ -50,36 +50,42 @@ impl Crypter {
 
     // Create a new Nonce for encrypting
     // Nonce is a combination of the current time and path hash
-    fn new_nonce(&self, path: &PathBuf) -> XNonce {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-            .to_le_bytes();
+    fn new_nonce(&self, path: &PathBuf) -> Result<XNonce, String> {
+        let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(ts) => ts,
+            Err(e) => e.duration(),
+        }
+        .as_nanos()
+        .to_le_bytes();
         let mut hasher = Keccak256::new();
-        hasher.update(&path.to_str().unwrap().as_bytes());
-        let nonce_bytes = [&timestamp, hasher.finalize().as_slice()].concat();
-        bytearray!(nonce_bytes, 24)
+        match path.to_str() {
+            Some(p) => {
+                hasher.update(p.as_bytes());
+                let nonce_bytes = [&timestamp, hasher.finalize().as_slice()].concat();
+                Ok(bytearray!(nonce_bytes, 24))
+            }
+            None => Err(format!("The path {} is not valid UTF-8", &path.display())),
+        }
     }
 
     // Encrypt some text
     // Nonce is placed at the front of the encrypted data
-    pub fn encrypt(&self, path: &PathBuf, text: &str) -> Vec<u8> {
-        let nonce = self.new_nonce(path);
-        let encrypted = self
-            .aead
-            .encrypt(&nonce, text.as_bytes())
-            .expect("Encryption failed");
-        Vec::from([&nonce, encrypted.as_slice()].concat())
+    pub fn encrypt(&self, path: &PathBuf, text: &str) -> Result<Vec<u8>, String> {
+        let nonce = self.new_nonce(path)?;
+        let encrypted = self.aead.encrypt(&nonce, text.as_bytes());
+        match encrypted {
+            Ok(enc) => Ok(Vec::from([&nonce, enc.as_slice()].concat())),
+            Err(_) => Err(String::new()),
+        }
     }
 
     // Decrypt some bytes
     // Expects the Nonce to be at the front
-    pub fn decrypt(&self, bytes: &[u8]) -> String {
+    pub fn decrypt(&self, bytes: &[u8]) -> Result<String, String> {
         let mut nonce: [u8; 24] = [0; 24];
         let mut text_vec: Vec<u8> = Vec::new();
         if bytes.len() < 25 {
-            return String::new();
+            return Err(String::from("The file is too small. Nothing to decrypt."));
         }
         for i in 0..24 {
             nonce[i] = bytes[i];
@@ -89,9 +95,14 @@ impl Crypter {
         }
         let text_bytes = self
             .aead
-            .decrypt(&GenericArray::from_slice(&nonce), text_vec.as_ref())
-            .expect("Decryption failed");
-        String::from(std::str::from_utf8(&text_bytes).expect("Failed to convert to UTF-8"))
+            .decrypt(&GenericArray::from_slice(&nonce), text_vec.as_ref());
+        match text_bytes {
+            Ok(tb) => match std::str::from_utf8(&tb) {
+                Ok(decrypted) => Ok(String::from(decrypted)),
+                Err(e) => Err(format!("Failed to convert decrypted data to UTF-8: {}", e)),
+            },
+            Err(_) => Err(String::from("Is the encryption key correct?")),
+        }
     }
 }
 

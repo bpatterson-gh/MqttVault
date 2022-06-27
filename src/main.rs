@@ -2,15 +2,19 @@
 
 #[cfg(test)]
 mod test {
-    use crate::{init_args, process_cli_args, process_env_vars, start_client, Arguments};
+    use crate::mqtt_client::json_helper::JsonHelper;
+    use crate::{change_crypt_key, init_args, process_cli_args, process_env_vars, start_client, Arguments};
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::sync::Once;
 
     // Path declarations
     static CONF_PATH_VALID: &str = "test_data/conf/valid.conf";
     static CONF_PATH_PARTIALLY_VALID: &str = "test_data/conf/partially_valid.conf";
     static CONF_PATH_INVALID: &str = "test_data/conf/invalid.conf";
+    static CONF_PATH_CHANGE_KEY: &str = "test_data/cck_db";
+    static CONF_PATH_CHANGE_KEY_FILE: &str = "test_data/cck_db/test.json";
+    static CONF_PATH_CHANGE_KEY_NESTED: &str = "test_data/cck_db/test/nest.json";
 
     // Valid config values
     static VALID_CONF_ADDRESS: &str = "ssl://localhost:8884";
@@ -40,6 +44,9 @@ mod test {
             fs::write(path, conf_file_partially_valid()).unwrap();
             let path = Path::new(CONF_PATH_INVALID);
             fs::write(path, conf_file_invalid()).unwrap();
+            let path = Path::new(CONF_PATH_CHANGE_KEY_NESTED);
+            let parent = path.parent().unwrap_or(path);
+            fs::create_dir_all(parent).unwrap();
         });
     }
 
@@ -63,7 +70,7 @@ mod test {
             VALID_CONF_RETRY_INTERVAL
         ));
         s.push_str("file-crypt-key = s00pers3cure \n");
-        s.push_str("mqtt-v5 = fAlSe \n");
+        s.push_str("mqtt-v5 = n \n");
         s
     }
 
@@ -201,6 +208,7 @@ mod test {
         cli_args.push(String::from(VALID_CONF_USER));
         cli_args.push(String::from("-v"));
         cli_args.push(String::from("fAlSe"));
+        cli_args.push(String::from("-v5"));
 
         let mut args = Arguments::new();
         process_cli_args(cli_args, &mut args);
@@ -217,7 +225,7 @@ mod test {
         assert_eq!(args.retry_interval, VALID_CONF_RETRY_INTERVAL);
         assert_eq!(args.topic_root, VALID_CONF_TOPIC_ROOT);
         assert_eq!(args.user, VALID_CONF_USER);
-        assert_eq!(args.mqtt_v5, false);
+        assert_eq!(args.mqtt_v5, true);
     }
 
     // Verify that long command line arguments are applied correctly
@@ -297,13 +305,69 @@ mod test {
         assert_eq!(args.ca_file, VALID_CONF_CA_FILE);
         assert_eq!(args.mqtt_v5, false);
     }
+
+    // Run change_crypt_key once and check that the data was moved
+    fn cck(from_key: &str, to_key: &str) {
+        change_crypt_key(PathBuf::from(CONF_PATH_CHANGE_KEY), from_key, to_key);
+        let jh = JsonHelper::new(to_key);
+        let mut file_path = PathBuf::from(CONF_PATH_CHANGE_KEY_FILE);
+        let mut nest_path = PathBuf::from(CONF_PATH_CHANGE_KEY_NESTED);
+        if jh.is_encrypted() {
+            file_path.set_extension("vault");
+            nest_path.set_extension("vault");
+        }
+        let res = jh.import_json(&file_path);
+        if res.is_err() {
+            eprintln!("Error importing json: {}", res.err().unwrap());
+            assert!(false);
+        }
+        let res = jh.import_json(&nest_path);
+        if res.is_err() {
+            eprintln!("Error importing json: {}", res.err().unwrap());
+            assert!(false);
+        }
+    }
+
+    // Verify that files can be encrypted, decrypted, and reencrypted via change_crypt_key
+    #[test]
+    fn change_crypt_keys() {
+        let jh = JsonHelper::new("");
+        let file_obj = json::object! {
+            "test"   => "42",
+        };
+        let nest_obj = json::object! {
+            "test"   => "nest",
+        };
+        assert!(jh
+            .export_json(&PathBuf::from(CONF_PATH_CHANGE_KEY_FILE), &file_obj)
+            .is_ok());
+        assert!(jh
+            .export_json(&PathBuf::from(CONF_PATH_CHANGE_KEY_NESTED), &nest_obj)
+            .is_ok());
+        cck("", "key1");
+        cck("key1", "key2");
+        cck("key2", "");
+        assert_eq!(
+            jh.import_json(&PathBuf::from(CONF_PATH_CHANGE_KEY_FILE))
+                .unwrap(),
+            file_obj.dump()
+        );
+        assert_eq!(
+            jh.import_json(&PathBuf::from(CONF_PATH_CHANGE_KEY_NESTED))
+                .unwrap(),
+            nest_obj.dump()
+        );
+    }
 }
 
 mod mqtt_client;
+use mqtt_client::json_helper::JsonHelper;
 use mqtt_client::MqttClient;
 use paho_mqtt::{SslOptions, SslOptionsBuilder};
+use std::ffi::OsStr;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Error as IoError, Read, Write};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use uuid::Uuid;
 
@@ -322,6 +386,7 @@ struct Arguments {
     max_retries: i32,
     retry_interval: u64,
     file_crypt_key: String,
+    change_crypt_key: bool,
 }
 
 impl Arguments {
@@ -341,7 +406,8 @@ impl Arguments {
             mqtt_v5: true,
             max_retries: -1,
             retry_interval: 30,
-            file_crypt_key: String::from("1"),
+            file_crypt_key: String::from(""),
+            change_crypt_key: false,
         }
     }
 
@@ -396,10 +462,7 @@ impl Arguments {
                                 "file-crypt-key" => args.file_crypt_key(&f_args[i + 1]),
                                 "key-file" => args.key_file(&f_args[i + 1]),
                                 "max-retries" => args.max_retries(&f_args[i + 1]),
-                                "mqtt-v5" => match f_args[i + 1].to_lowercase().as_str() {
-                                    "0" | "false" => args.mqtt_v5(false),
-                                    _ => args.mqtt_v5(true),
-                                },
+                                "mqtt-v5" => args.mqtt_v5(&f_args[i + 1]),
                                 "password" => args.password(&f_args[i + 1]),
                                 "retry-interval" => args.retry_interval(&f_args[i + 1]),
                                 "topic-root" => args.topic_root(&f_args[i + 1]),
@@ -418,6 +481,14 @@ impl Arguments {
             }
         }
         Ok(args)
+    }
+
+    fn str_to_bool(value: &str, default: bool) -> bool {
+        match value.to_lowercase().as_str() {
+            "0" | "false" | "n" => false,
+            "1" | "true" | "y" => true,
+            _ => default,
+        }
     }
 
     pub fn address(&mut self, address: &str) -> &mut Self {
@@ -457,8 +528,8 @@ impl Arguments {
         self
     }
 
-    pub fn mqtt_v5(&mut self, mqtt_v5: bool) -> &mut Self {
-        self.mqtt_v5 = mqtt_v5;
+    pub fn mqtt_v5(&mut self, mqtt_v5: &str) -> &mut Self {
+        self.mqtt_v5 = Arguments::str_to_bool(mqtt_v5, self.mqtt_v5);
         self
     }
 
@@ -484,6 +555,26 @@ impl Arguments {
         self.file_crypt_key = String::from(file_crypt_key);
         self
     }
+
+    pub fn change_crypt_key(&mut self) -> &mut Self {
+        self.change_crypt_key = true;
+        self
+    }
+}
+
+// Get input from STDIN
+fn get_input(prompt: &str, show_input: bool) -> String {
+    let mut input = String::new();
+    if show_input {
+        let stdin = std::io::stdin();
+        let mut stdout = std::io::stdout();
+        print!("{} ", prompt);
+        stdout.flush().unwrap_or(());
+        stdin.read_line(&mut input).unwrap_or(0);
+        String::from(input.trim_end())
+    } else {
+        rpassword::prompt_password(prompt).unwrap_or(input)
+    }
 }
 
 // Apply environment variables
@@ -502,10 +593,7 @@ fn process_env_vars(env_vars: std::env::Vars, args: &mut Arguments) {
             "MQTTV_RETRYINTERVAL" => args.retry_interval(&val),
             "MQTTV_TOPICROOT" => args.topic_root(&val),
             "MQTTV_USER" => args.user(&val),
-            "MQTTV_V5" => match val.to_lowercase().as_str() {
-                "0" | "false" => args.mqtt_v5(false),
-                _ => args.mqtt_v5(true),
-            },
+            "MQTTV_V5" => args.mqtt_v5(&val),
             _ => args,
         };
     }
@@ -514,23 +602,35 @@ fn process_env_vars(env_vars: std::env::Vars, args: &mut Arguments) {
 // Apply command line arguments
 fn process_cli_args(cli_args: Vec<String>, args: &mut Arguments) {
     for i in 0..=cli_args.len() - 1 {
+        let arg_val = if (i + 1) >= cli_args.len() {
+            ""
+        } else {
+            &cli_args[i + 1]
+        };
         match cli_args[i].as_str() {
-            "-a" | "--address" => args.address(&cli_args[i + 1]),
-            "-c" | "--ca-file" => args.ca_file(&cli_args[i + 1]),
-            "-d" | "--db-root" => args.db_root(&cli_args[i + 1]),
-            "-e" | "--cert-file" => args.cert_file(&cli_args[i + 1]),
-            "-f" | "--file-crypt-key" => args.file_crypt_key(&cli_args[i + 1]),
-            "-i" | "--client-id" => args.client_id(&cli_args[i + 1]),
-            "-k" | "--key-file" => args.key_file(&cli_args[i + 1]),
-            "-m" | "--max-retries" => args.max_retries(&cli_args[i + 1]),
-            "-p" | "--password" => args.password(&cli_args[i + 1]),
-            "-r" | "--retry-interval" => args.retry_interval(&cli_args[i + 1]),
-            "-t" | "--topic-root" => args.topic_root(&cli_args[i + 1]),
-            "-u" | "--user" => args.user(&cli_args[i + 1]),
-            "-v" | "--mqtt-v5" => match cli_args[i + 1].to_lowercase().as_str() {
-                "0" | "false" => args.mqtt_v5(false),
-                _ => args.mqtt_v5(true),
-            },
+            "-a" | "--address" => args.address(arg_val),
+            "-c" | "--ca-file" => args.ca_file(arg_val),
+            "-d" | "--db-root" => args.db_root(arg_val),
+            "-e" | "--cert-file" => args.cert_file(arg_val),
+            "-f" | "--file-crypt-key" => args.file_crypt_key(arg_val),
+            "-i" | "--client-id" => args.client_id(arg_val),
+            "-k" | "--key-file" => args.key_file(arg_val),
+            "-m" | "--max-retries" => args.max_retries(arg_val),
+            "-p" | "--password" => args.password(arg_val),
+            "-r" | "--retry-interval" => args.retry_interval(arg_val),
+            "-t" | "--topic-root" => args.topic_root(arg_val),
+            "-u" | "--user" => args.user(arg_val),
+            // -v is deprecated as of 0.9.0 and will be removed/replaced after a few version bumps
+            "-v" | "--mqtt-v5" => {
+                println!(
+                    "Warning: --mqtt-v5 (-v) is deprecated and will be removed/replaced \
+                in a future version. Use -v5 or -v3 instead."
+                );
+                args.mqtt_v5(&arg_val)
+            }
+            "-v3" => args.mqtt_v5("0"),
+            "-v5" => args.mqtt_v5("1"),
+            "--change-crypt-key" => args.change_crypt_key(),
             _ => args,
         };
     }
@@ -551,7 +651,142 @@ fn init_args() -> Arguments {
     let mut args = args.unwrap_or(Arguments::new());
     process_env_vars(std::env::vars(), &mut args);
     process_cli_args(cli_args, &mut args);
+    if args.file_crypt_key.to_uppercase() == "STDIN" {
+        args.file_crypt_key(&get_input("Enter the encryption key:", false));
+    }
     args
+}
+
+fn change_crypt_key_recursive(
+    current_json: &JsonHelper,
+    new_json: &JsonHelper,
+    start_path: &PathBuf,
+    current_ext: &str,
+) -> Result<(), IoError> {
+    for entry in std::fs::read_dir(start_path)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            change_crypt_key_recursive(current_json, new_json, &path, current_ext)?;
+        // Only attempt to decrypt if path has the correct extension and it isn't already encrypted with the new key
+        } else if path.extension().unwrap_or(OsStr::new("")) == current_ext && new_json.import_json(&path).is_err() {
+            let mut tmp_path = PathBuf::from(&path);
+            tmp_path.set_extension("tmpnew");
+            let json_str = current_json.import_json(&path)?;
+            match json::parse(&json_str) {
+                Ok(data) => new_json.export_json(&tmp_path, &data)?,
+                Err(e) => return Err(current_json.json_to_io_error(e, Some(&json_str))),
+            }
+        }
+    }
+    Ok(())
+}
+
+fn change_crypt_key_success(start_path: &PathBuf, current_ext: &str, new_ext: &str) -> Result<(), IoError> {
+    for entry in std::fs::read_dir(start_path)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            change_crypt_key_success(&path, current_ext, new_ext)?;
+        } else if path.extension().unwrap_or(OsStr::new("")) == "tmpnew" {
+            let mut vault_path = PathBuf::from(&path);
+            vault_path.set_extension(current_ext);
+            std::fs::remove_file(&vault_path)?;
+            vault_path.set_extension(new_ext);
+            std::fs::rename(&path, &vault_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn change_crypt_key_failure(start_path: &PathBuf) -> Result<(), IoError> {
+    for entry in std::fs::read_dir(start_path)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            change_crypt_key_failure(&path)?;
+        } else if path.extension().unwrap_or(OsStr::new("")) == "tmpnew" {
+            std::fs::remove_file(&path)?;
+        }
+    }
+    Ok(())
+}
+
+fn change_crypt_key(db_root: PathBuf, current_key: &str, new_key: &str) {
+    let current_json = JsonHelper::new(current_key);
+    let new_json = JsonHelper::new(new_key);
+    let current_ext = if current_json.is_encrypted() {
+        "vault"
+    } else {
+        "json"
+    };
+    let new_ext = if new_json.is_encrypted() {
+        "vault"
+    } else {
+        "json"
+    };
+    match change_crypt_key_recursive(&current_json, &new_json, &db_root, current_ext) {
+        Ok(_) => match change_crypt_key_success(&db_root, current_ext, new_ext) {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!(
+                    "Error occurred during cleanup:\n    {}\n\nThe conversion was otherwise successful. \
+                You can finish the process manually by renaming any .tmpnew files in your db-root to {}",
+                    e, new_ext
+                )
+            }
+        },
+        Err(e) => {
+            eprintln!(
+                "Error:\n    {}\n\nThe conversion was unsuccessful. Your data is still encrypted with the original key.",
+                e
+            );
+            match change_crypt_key_failure(&db_root) {
+                Ok(_) => (),
+                Err(e) => {
+                    eprintln!(
+                        "Another error occurred during cleanup:\n    {}\n\n \
+                Please remove any lingering .tmpnew files in your db-root before trying to change the key again.",
+                        e
+                    )
+                }
+            }
+        }
+    }
+}
+
+fn ask_change_crypt_key(args: &Arguments) {
+    let current_key = if args.file_crypt_key == "" {
+        get_input(
+            "Enter the current encryption key, or leave blank if unencrypted:",
+            false,
+        )
+    } else {
+        String::from(&args.file_crypt_key)
+    };
+    let new_key = get_input(
+        "Enter the new encryption key, or leave blank for unencrypted:",
+        false,
+    );
+    if current_key == new_key {
+        println!("The current and new keys are the same.");
+        return;
+    } else if new_key != "" {
+        if new_key != get_input("Enter the new encryption key again:", false) {
+            println!("The new keys are not the same. Exiting.");
+            return;
+        }
+    }
+    print!(
+        "You are about to {}. Type YES in all caps to confirm:",
+        if new_key == "" {
+            "unencrypt your vault"
+        } else {
+            "change your vault's encryption key"
+        }
+    );
+    if get_input("", true) == "YES" {
+        change_crypt_key(PathBuf::from(&args.db_root), &current_key, &new_key);
+    } else {
+        println!("Not confirmed.");
+    }
 }
 
 // Create an MqttClient with the given args and verify that it connects
@@ -565,7 +800,7 @@ fn start_client(args: Arguments) -> Result<MqttClient, String> {
         args.max_retries,
         args.retry_interval,
         &args.file_crypt_key,
-    );
+    )?;
     let user = if args.user == "" {
         None
     } else {
@@ -601,19 +836,25 @@ fn start_client(args: Arguments) -> Result<MqttClient, String> {
 }
 
 fn main() {
-    let mut client = match start_client(init_args()) {
+    let args = init_args();
+    if args.change_crypt_key {
+        ask_change_crypt_key(&args);
+        return;
+    }
+    let mut client = match start_client(args) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{}", e);
             return;
         }
     };
-
     static HALT: AtomicBool = AtomicBool::new(false);
-    ctrlc::set_handler(move || {
+    match ctrlc::set_handler(move || {
         HALT.store(true, Ordering::Relaxed);
-    })
-    .expect("Failed to set handler for termination signals");
+    }) {
+        Ok(_) => (),
+        Err(e) => eprintln!("Failed to set handler for termination signals: {}.", e),
+    }
 
     while client.main_loop() {
         if HALT.load(Ordering::Relaxed) {

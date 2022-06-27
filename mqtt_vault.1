@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "mqtt_vault" "1" "" "Version 0.8" "MQTT Vault Manual"
+.TH "mqtt_vault" "1" "" "Version 0.9" "MQTT Vault Manual"
 .hy
 .SH NAME
 .PP
@@ -64,16 +64,31 @@ Environment variable: \f[B]MQTTV_CERTFILE\f[R]
 .PP
 Password to encrypt the JSON files with.
 If this is \f[I]none\f[R], the database will not be encrypted.
+Setting this to \f[I]STDIN\f[R] will cause an interactive prompt to
+appear.
 .PP
 MQTT Vault cannot make use of encrypted and unencrypted files at the
 same time, but they will not overwrite each other if placed in the same
 \f[B]--db-root\f[R].
+However, using \f[B]--change-crypt-key\f[R] to add or remove encryption
+will overwrite the files it converts.
 .PP
 Max length is 32 characters.
 .PP
 Default: \f[I]none\f[R]
 .PP
 Environment variable: \f[B]MQTTV_FILECRYPTKEY\f[R]
+.SS --change-crypt-key
+.PP
+Allows an encryption key to be changed, added, or removed.
+Ignores all other arguments except \f[B]--file-crypt-key\f[R].
+.PP
+This will overwrite the current database if there are no errors.
+.PP
+An interactive prompt will appear to collect the necessary information.
+If \f[B]--file-crypt-key\f[R] is specified, it will be used as the
+current key and the user will only have to enter a new key.
+After the data is converted, the program will halt.
 .SS -i, --client-id \f[I][string]\f[R]
 .PP
 MQTT client ID.
@@ -139,7 +154,25 @@ MQTT user.
 Default: \f[I]none\f[R]
 .PP
 Environment variable: \f[B]MQTTV_USER\f[R]
-.SS -v, --mqtt-v5 \f[I][boolean]\f[R]
+.SS -v3
+.PP
+Connect with MQTT v3 instead of v5.
+.PP
+MQTT v3 has a limited featureset and isn\[cq]t recommended.
+.PP
+Environment variable: \f[B]MQTTV_V5\f[R] =
+[\f[I]false\f[R]/\f[I]0\f[R]/\f[I]N\f[R]]
+.SS -v5
+.PP
+Connect with MQTT v5.
+This is the default behavior.
+.PP
+Environment variable: \f[B]MQTTV_V5\f[R] =
+[\f[I]true\f[R]/\f[I]1\f[R]/\f[I]Y\f[R]]
+.SS DEPRECATED -v, --mqtt-v5 \f[I][boolean]\f[R]
+.PP
+This is deprecated.
+Use \f[B]-v3\f[R] or \f[B]-v5\f[R] instead
 .PP
 Connect with MQTT v5.
 .PP
