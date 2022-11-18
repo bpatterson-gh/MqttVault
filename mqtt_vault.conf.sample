@@ -60,3 +60,11 @@
 # but they will not overwrite each other if placed in the same db-root
 # Max length is 32 characters
 #file-crypt-key = long_random_password
+
+# silent - Suppress error messages
+# Default is false
+#silent = false
+
+# verbose - Show informative messages
+# Default is false
+#verbose = false

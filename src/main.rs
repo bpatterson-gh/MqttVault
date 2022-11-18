@@ -206,9 +206,10 @@ mod test {
         cli_args.push(String::from(VALID_CONF_TOPIC_ROOT));
         cli_args.push(String::from("-u"));
         cli_args.push(String::from(VALID_CONF_USER));
-        cli_args.push(String::from("-v"));
-        cli_args.push(String::from("fAlSe"));
+        cli_args.push(String::from("-v3"));
         cli_args.push(String::from("-v5"));
+        cli_args.push(String::from("-S"));
+        cli_args.push(String::from("-V"));
 
         let mut args = Arguments::new();
         process_cli_args(cli_args, &mut args);
@@ -226,6 +227,8 @@ mod test {
         assert_eq!(args.topic_root, VALID_CONF_TOPIC_ROOT);
         assert_eq!(args.user, VALID_CONF_USER);
         assert_eq!(args.mqtt_v5, true);
+        assert_eq!(args.silent, true);
+        assert_eq!(args.verbose, true);
     }
 
     // Verify that long command line arguments are applied correctly
@@ -254,10 +257,11 @@ mod test {
         cli_args.push(VALID_CONF_RETRY_INTERVAL.to_string());
         cli_args.push(String::from("--topic-root"));
         cli_args.push(String::from(VALID_CONF_TOPIC_ROOT));
+        cli_args.push(String::from("-v3"));
         cli_args.push(String::from("--user"));
         cli_args.push(String::from(VALID_CONF_USER));
-        cli_args.push(String::from("--mqtt-v5"));
-        cli_args.push(String::from("0"));
+        cli_args.push(String::from("--silent"));
+        cli_args.push(String::from("--verbose"));
 
         let mut args = Arguments::new();
         process_cli_args(cli_args, &mut args);
@@ -275,6 +279,8 @@ mod test {
         assert_eq!(args.topic_root, VALID_CONF_TOPIC_ROOT);
         assert_eq!(args.user, VALID_CONF_USER);
         assert_eq!(args.mqtt_v5, false);
+        assert_eq!(args.silent, true);
+        assert_eq!(args.verbose, true);
     }
 
     // Verify that command line arguments override arguments from a file
@@ -360,7 +366,9 @@ mod test {
     }
 }
 
+mod logger;
 mod mqtt_client;
+use logger::Logger;
 use mqtt_client::json_helper::JsonHelper;
 use mqtt_client::MqttClient;
 use paho_mqtt::{SslOptions, SslOptionsBuilder};
@@ -387,6 +395,9 @@ struct Arguments {
     retry_interval: u64,
     file_crypt_key: String,
     change_crypt_key: bool,
+    silent: bool,
+    verbose: bool,
+    version: bool,
 }
 
 impl Arguments {
@@ -408,6 +419,9 @@ impl Arguments {
             retry_interval: 30,
             file_crypt_key: String::from(""),
             change_crypt_key: false,
+            silent: false,
+            verbose: false,
+            version: false,
         }
     }
 
@@ -467,6 +481,8 @@ impl Arguments {
                                 "retry-interval" => args.retry_interval(&f_args[i + 1]),
                                 "topic-root" => args.topic_root(&f_args[i + 1]),
                                 "user" => args.user(&f_args[i + 1]),
+                                "silent" => args.silent(&f_args[i + 1]),
+                                "verbose" => args.verbose(&f_args[i + 1]),
                                 _ => &mut args,
                             };
                         }
@@ -560,6 +576,21 @@ impl Arguments {
         self.change_crypt_key = true;
         self
     }
+
+    pub fn silent(&mut self, silent: &str) -> &mut Self {
+        self.silent = Arguments::str_to_bool(silent, false);
+        self
+    }
+
+    pub fn verbose(&mut self, verbose: &str) -> &mut Self {
+        self.verbose = Arguments::str_to_bool(verbose, false);
+        self
+    }
+
+    pub fn version(&mut self) -> &mut Self {
+        self.version = true;
+        self
+    }
 }
 
 // Get input from STDIN
@@ -594,6 +625,8 @@ fn process_env_vars(env_vars: std::env::Vars, args: &mut Arguments) {
             "MQTTV_TOPICROOT" => args.topic_root(&val),
             "MQTTV_USER" => args.user(&val),
             "MQTTV_V5" => args.mqtt_v5(&val),
+            "MQTTV_SILENT" => args.silent(&val),
+            "MQTTV_VERBOSE" => args.verbose(&val),
             _ => args,
         };
     }
@@ -620,17 +653,12 @@ fn process_cli_args(cli_args: Vec<String>, args: &mut Arguments) {
             "-r" | "--retry-interval" => args.retry_interval(arg_val),
             "-t" | "--topic-root" => args.topic_root(arg_val),
             "-u" | "--user" => args.user(arg_val),
-            // -v is deprecated as of 0.9.0 and will be removed/replaced after a few version bumps
-            "-v" | "--mqtt-v5" => {
-                println!(
-                    "Warning: --mqtt-v5 (-v) is deprecated and will be removed/replaced \
-                in a future version. Use -v5 or -v3 instead."
-                );
-                args.mqtt_v5(&arg_val)
-            }
+            "-S" | "--silent" => args.silent("1"),
+            "-V" | "--verbose" => args.verbose("1"),
             "-v3" => args.mqtt_v5("0"),
             "-v5" => args.mqtt_v5("1"),
             "--change-crypt-key" => args.change_crypt_key(),
+            "-v" | "--version" => args.version(),
             _ => args,
         };
     }
@@ -835,25 +863,50 @@ fn start_client(args: Arguments) -> Result<MqttClient, String> {
     Ok(client)
 }
 
+// Processes special functions that should not run the main loop
+// Returns true if the program should halt instead of starting normally
+fn halt_after_special_function(args: &Arguments) -> bool {
+    if args.version {
+        println!("MQTT Vault version {}", VERSION);
+        return true;
+    } else if args.change_crypt_key {
+        ask_change_crypt_key(&args);
+        return true;
+    }
+    false
+}
+
+// Called right before the program terminates
+fn on_exit() {
+    Logger::log_info("MQTT Halt");
+}
+
+const VERSION: &str = "1.0.0";
+
 fn main() {
     let args = init_args();
-    if args.change_crypt_key {
-        ask_change_crypt_key(&args);
+    if halt_after_special_function(&args) {
         return;
     }
+
+    Logger::init(args.silent, args.verbose);
     let mut client = match start_client(args) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("{}", e);
+            Logger::log_error(e);
             return;
         }
     };
     static HALT: AtomicBool = AtomicBool::new(false);
     match ctrlc::set_handler(move || {
+        on_exit();
         HALT.store(true, Ordering::Relaxed);
     }) {
         Ok(_) => (),
-        Err(e) => eprintln!("Failed to set handler for termination signals: {}.", e),
+        Err(e) => Logger::log_error(format!(
+            "Failed to set handler for termination signals: {}.",
+            e
+        )),
     }
 
     while client.main_loop() {

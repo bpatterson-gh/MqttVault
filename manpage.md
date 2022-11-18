@@ -1,4 +1,4 @@
-% mqtt_vault(1) Version 0.9 | MQTT Vault Manual
+% mqtt_vault(1) Version 1.0 | MQTT Vault Manual
 
 [!/]: # (This file is used to generate the man page. Compile it with pandoc:)
 [/!]: # ( pandoc --standalone -t man manpage.md -o mqtt_vault.1 )
@@ -129,6 +129,14 @@ Most options can also be controlled via environment variables.
 
   Default: *none*
 
+## -S, \--silent
+
+  Suppress error messages.
+
+  Combine with **\--verbose** to suppress errors but show info.
+
+  Environment variable: **MQTTV_SILENT** = [*true*/*1*/*Y* or *false*/*0*/*N*]
+
 ## -t, \--topic-root  *[string]*
 
   Root topic that MQTT Vault will use to send & receive messages.
@@ -161,17 +169,17 @@ Most options can also be controlled via environment variables.
 
   Environment variable: **MQTTV_V5** = [*true*/*1*/*Y*]
 
-## DEPRECATED -v, \--mqtt-v5  *[boolean]*
+## -V, \--verbose
 
-  This is deprecated. Use **-v3** or **-v5** instead
+  Show informative messages.
+  
+  Combine with **\--silent** to suppress errors but show info.
 
-  Connect with MQTT v5.
+  Environment variable: **MQTTV_VERBOSE** = [*true*/*1*/*Y* or *false*/*0*/*N*]
 
-  Allows response topics to be used when sending a request to the get topic.
+## -v, \--version
 
-  Default: *true*
-
-  Environment variable: **MQTTV_V5**
+  Output the version number and exit.
 
 # EXAMPLES
 

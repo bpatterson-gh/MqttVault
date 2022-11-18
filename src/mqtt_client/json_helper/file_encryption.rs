@@ -2,7 +2,7 @@
 
 use chacha20poly1305::aead::generic_array::typenum::U32;
 use chacha20poly1305::aead::generic_array::GenericArray;
-use chacha20poly1305::aead::{Aead, NewAead};
+use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 use sha3::{Digest, Keccak256};
 use std::path::PathBuf;

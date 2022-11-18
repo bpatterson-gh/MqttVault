@@ -1,4 +1,4 @@
-<img src="mqtt_vault.svg" alt="MQTT Vault logo" width="128"/>
+<div style="text-align: center;"><img src="mqtt_vault.svg" alt="MQTT Vault logo" width="128"/></div>
 
 # MQTT Vault
 
@@ -8,29 +8,21 @@ A JSON database controlled via MQTT.
 
 MQTT Vault allows you to create virtual IoT devices that retain their state.
 These virtual devices communicate over MQTT the same way that many physical IoT devices do, allowing you to control them with the same infrastructure.
-SSL certificates are supported for secure connections to the broker.
+
 For details on using the program, please see manpage.md or run **man mqtt_vault** after installing.
 
-## Planned features
+## Features
 
-The following features are things I plan to add before version 1.0.
-These features will increase the security of the program, but are otherwise not necessary.
+#### Database
+  - Get and set data via MQTT topics
+  - Data is stored as individual JSON files
+  - Folder structure corresponds to the topic used to set the data
 
-#### Database encryption ✅
-  - Encrypt the data stored on disk so it can't be accessed without going through MQTT Vault ✅
-  - Add a mechanism to change the encryption key ✅
-  - Add a mechanism to migrate between encrypted and unencrypted DBs ✅
-  - ~~Maybe support using SSL private key as password?~~ Decided against this since certs can get replaced frequently
-#### ~~User filter~~ This can't be done since MQTT messages lack sender information.
-  - ~~Accept or reject commands based on the MQTT user that sent the message~~
-  - ~~Maybe also filter by client ID?~~
+#### MQTT over TLS
+  - Optionally encrypts the broker connection using an SSL certificate
+  - Supports separate or combined public/private keys
 
-## Notes for Contributers
-
-Some of the automated tests require an MQTT broker to be running.
-I recommend using mosquitto since this repository contains a test config for mosquitto, but if you want to use another broker I would ask that you add a config file for it so others can use it too.
-To make use of the config file, run **mosquitto -c test_data/mosquitto.conf** from the mqtt_vault directory.
-
-All included SSL certificates and private keys use *test* as the password.
-If you introduce more certs, please keep using *test* as the password.
-The same goes for MQTT user passwords.
+#### Database encryption
+  - Optionally encrypts the data stored on disk so it can't be accessed without going through MQTT Vault
+  - Allows the encryption key to be changed or removed by passing --change-crypt-key
+  - Data is encrypted using the <a href="https://crates.io/crates/chacha20poly1305">chacha20poly1305</a> crate

@@ -28,7 +28,7 @@ mod test {
     }
 
     // MQTT SSL options for secure listeners
-    pub fn ssl_options() -> mqtt::SslOptions {
+    fn ssl_options() -> mqtt::SslOptions {
         let mut ssl_opts = mqtt::SslOptionsBuilder::new();
         let ssl_opts = ssl_opts.ssl_version(mqtt::SslVersion::Tls_1_2);
         let ssl_opts = ssl_opts.trust_store("test_data/certs/ca.crt");
@@ -651,6 +651,7 @@ mod test {
 }
 
 pub mod json_helper;
+use crate::logger::Logger;
 use crossbeam_channel::RecvTimeoutError;
 use json_helper::JsonHelper;
 use mqtt::message::Message;
@@ -743,17 +744,31 @@ impl MqttClient {
         ssl_opts: Option<mqtt::SslOptions>,
     ) -> Result<ServerResponse, mqtt::Error> {
         let connect_opts = match ssl_opts {
-            Some(opts) => mqtt::ConnectOptionsBuilder::new()
-                .mqtt_version(if self.v5 { 5 } else { 0 })
-                .user_name(user.unwrap_or(""))
-                .password(password.unwrap_or(""))
-                .ssl_options(opts)
-                .finalize(),
-            None => mqtt::ConnectOptionsBuilder::new()
-                .mqtt_version(if self.v5 { 5 } else { 0 })
-                .user_name(user.unwrap_or(""))
-                .password(password.unwrap_or(""))
-                .finalize(),
+            Some(opts) => {
+                Logger::log_info(format!(
+                    "Connecting as {} with MQTT Version {} over TLS...",
+                    user.unwrap_or("Anonymous"),
+                    if self.v5 { "5" } else { "3" }
+                ));
+                mqtt::ConnectOptionsBuilder::new()
+                    .mqtt_version(if self.v5 { 5 } else { 0 })
+                    .user_name(user.unwrap_or(""))
+                    .password(password.unwrap_or(""))
+                    .ssl_options(opts)
+                    .finalize()
+            }
+            None => {
+                Logger::log_info(format!(
+                    "Connecting as {} with MQTT Version {}...",
+                    user.unwrap_or("Anonymous"),
+                    if self.v5 { "5" } else { "3" }
+                ));
+                mqtt::ConnectOptionsBuilder::new()
+                    .mqtt_version(if self.v5 { 5 } else { 0 })
+                    .user_name(user.unwrap_or(""))
+                    .password(password.unwrap_or(""))
+                    .finalize()
+            }
         };
         let token = self.client.connect(connect_opts);
         token.wait()?;
@@ -762,7 +777,9 @@ impl MqttClient {
         let token = self.client.subscribe(&topic_set, 1);
         token.wait()?;
         let token = self.client.subscribe(&self.topic_get, 1);
-        token.wait()
+        let resp = token.wait()?;
+        Logger::log_info("Connected!");
+        Ok(resp)
     }
 
     // Convert an MQTT topic to a JSON file path
@@ -817,10 +834,13 @@ impl MqttClient {
     fn process_set(&self, topic: &str, payload: &str) {
         match self.update_db(topic, payload) {
             Ok(_) => match self.send_update_message(topic, payload) {
-                Ok(_) => (),
-                Err(e) => eprintln!("Failed to send update message for {}: {}", topic, e),
+                Ok(_) => Logger::log_info(format!("Set {}", topic)),
+                Err(e) => Logger::log_error(format!(
+                    "Failed to send update message for {}: {}",
+                    topic, e
+                )),
             },
-            Err(e) => eprintln!("Failed to update database for {}: {}", topic, e),
+            Err(e) => Logger::log_error(format!("Failed to update database for {}: {}", topic, e)),
         }
     }
 
@@ -832,19 +852,19 @@ impl MqttClient {
             Ok(payload_path) => match self.json_helper.import_json(&payload_path) {
                 Ok(payload) => message = Message::new(resp_topic, payload, 1),
                 Err(e) => {
-                    eprintln!("Error while preparing v5 response: {}", e);
+                    Logger::log_error(format!("Error while preparing v5 response: {}", e));
                     message = Message::new(resp_topic, "", 1)
                 }
             },
             Err(e) => {
-                eprintln!("Error while preparing v5 response: {}", e);
+                Logger::log_error(format!("Error while preparing v5 response: {}", e));
                 message = Message::new(resp_topic, "", 1)
             }
         }
         match self.client.publish(message).wait() {
-            Ok(_) => (),
+            Ok(_) => Logger::log_info(format!("Refreshed {} via {}", topic, resp_topic)),
             Err(e) => {
-                eprintln!("Failed to send v5 response message: {}", e);
+                Logger::log_error(format!("Failed to send v5 response message: {}", e));
             }
         }
     }
@@ -856,17 +876,17 @@ impl MqttClient {
         match self.topic_path(topic) {
             Ok(path) => match self.json_helper.import_json(&path) {
                 Ok(j) => payload = Some(j),
-                Err(e) => eprintln!("Error while preparing fallback response: {}", e),
+                Err(e) => Logger::log_error(format!("Error while preparing fallback response: {}", e)),
             },
-            Err(e) => eprintln!("Error while preparing fallback response: {}", e),
+            Err(e) => Logger::log_error(format!("Error while preparing fallback response: {}", e)),
         }
         match payload {
             None => (),
             Some(payload) => {
                 let message = Message::new(topic, payload, 1);
                 match self.client.publish(message).wait() {
-                    Ok(_) => (),
-                    Err(e) => eprintln!("Failed to send fallback response message: {}", e),
+                    Ok(_) => Logger::log_info(format!("Refreshed {}", topic)),
+                    Err(e) => Logger::log_error(format!("Failed to send fallback response message: {}", e)),
                 }
             }
         }
@@ -897,6 +917,8 @@ impl MqttClient {
             self.process_set(topic, &message.payload_str());
         } else if topic.len() >= self.topic_get.len() && &message.topic() == &self.topic_get {
             self.process_get(message);
+        } else {
+            Logger::log_info(format!("Unknown topic: {}", topic));
         }
     }
 
@@ -923,27 +945,34 @@ impl MqttClient {
                 Ok(_) => {
                     self.retry_instant = None;
                     self.retry_attempts = 0;
-                    println!("Reconnected successfully");
+                    Logger::log_info("Reconnected successfully!");
                 }
                 Err(_) => {
-                    println!("Reconnection attempt failed");
+                    Logger::log_error("Reconnection attempt failed.");
                     self.retry_attempts += 1;
                     if self.retry_attempts_max > -1 && self.retry_attempts >= self.retry_attempts_max {
-                        eprintln!("Failed to reconnect after {} attempts", self.retry_attempts);
+                        Logger::log_error(format!(
+                            "Failed to reconnect after {} attempts.",
+                            self.retry_attempts
+                        ));
                         return false;
                     } else {
                         self.retry_instant = Some(Instant::now());
-                        println!("Attempting to reconnect in {} seconds", self.retry_cooldown);
+                        Logger::log_info(format!(
+                            "Attempting to reconnect in {} seconds...",
+                            self.retry_cooldown
+                        ));
                     }
                 }
             }
         } else if self.retry_instant.is_none() && !self.check_messages() {
             if !self.client.is_connected() {
                 self.retry_instant = Some(Instant::now());
-                println!(
-                    "Connection to broker lost\nAttempting to reconnect in {} seconds",
+                Logger::log_error("Connection to broker lost.");
+                Logger::log_info(format!(
+                    "Attempting to reconnect in {} seconds...",
                     self.retry_cooldown
-                );
+                ));
             }
         }
         true
