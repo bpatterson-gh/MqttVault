@@ -5,6 +5,7 @@ mod test {
     use crate::mqtt_client::json_helper::JsonHelper;
     use crate::{change_crypt_key, init_args, process_cli_args, process_env_vars, start_client, Arguments};
     use std::fs;
+    use std::io::BufRead;
     use std::path::{Path, PathBuf};
     use std::sync::Once;
 
@@ -363,6 +364,34 @@ mod test {
                 .unwrap(),
             nest_obj.dump()
         );
+    }
+
+    // Ensure that the version in Cargo.toml matches the version printed by --version
+    #[test]
+    fn version_mismatch() {
+        let mut test_str = String::from("version = \"");
+        test_str.push_str(crate::VERSION);
+        test_str.push('"');
+        let mut found = false;
+        match fs::read("Cargo.toml") {
+            Ok(data) => {
+                for line in data.lines() {
+                    match line {
+                        Ok(l) => {
+                            if &l == &test_str {
+                                found = true;
+                            }
+                        }
+                        Err(_) => (),
+                    }
+                }
+            }
+            Err(_) => {
+                println!("Failed to open Cargo.toml");
+                assert!(false);
+            }
+        }
+        assert_eq!(found, true);
     }
 }
 
@@ -881,7 +910,7 @@ fn on_exit() {
     Logger::log_info("MQTT Halt");
 }
 
-const VERSION: &str = "1.0.0";
+const VERSION: &str = "1.0.1";
 
 fn main() {
     let args = init_args();

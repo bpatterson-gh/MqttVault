@@ -297,9 +297,8 @@ mod test {
         let mut conn_user = String::from(name);
         conn_user.push_str("-usr");
         let res = client.connect(
-            mqtt::ConnectOptionsBuilder::new()
+            mqtt::ConnectOptionsBuilder::new_v5()
                 .user_name(&conn_user)
-                .mqtt_version(5)
                 .finalize(),
         );
         assert!(res.is_ok());
@@ -319,9 +318,8 @@ mod test {
         let mut conn_user = String::from(name);
         conn_user.push_str("-usr");
         let res = client.connect(
-            mqtt::ConnectOptionsBuilder::new()
+            mqtt::ConnectOptionsBuilder::new_v5()
                 .user_name(&conn_user)
-                .mqtt_version(5)
                 .ssl_options(ssl_options())
                 .finalize(),
         );
@@ -750,12 +748,19 @@ impl MqttClient {
                     user.unwrap_or("Anonymous"),
                     if self.v5 { "5" } else { "3" }
                 ));
-                mqtt::ConnectOptionsBuilder::new()
-                    .mqtt_version(if self.v5 { 5 } else { 0 })
-                    .user_name(user.unwrap_or(""))
-                    .password(password.unwrap_or(""))
-                    .ssl_options(opts)
-                    .finalize()
+                if self.v5 {
+                    mqtt::ConnectOptionsBuilder::new_v5()
+                        .user_name(user.unwrap_or(""))
+                        .password(password.unwrap_or(""))
+                        .ssl_options(opts)
+                        .finalize()
+                } else {
+                    mqtt::ConnectOptionsBuilder::new_v3()
+                        .user_name(user.unwrap_or(""))
+                        .password(password.unwrap_or(""))
+                        .ssl_options(opts)
+                        .finalize()
+                }
             }
             None => {
                 Logger::log_info(format!(
@@ -763,11 +768,17 @@ impl MqttClient {
                     user.unwrap_or("Anonymous"),
                     if self.v5 { "5" } else { "3" }
                 ));
-                mqtt::ConnectOptionsBuilder::new()
-                    .mqtt_version(if self.v5 { 5 } else { 0 })
-                    .user_name(user.unwrap_or(""))
-                    .password(password.unwrap_or(""))
-                    .finalize()
+                if self.v5 {
+                    mqtt::ConnectOptionsBuilder::new_v5()
+                        .user_name(user.unwrap_or(""))
+                        .password(password.unwrap_or(""))
+                        .finalize()
+                } else {
+                    mqtt::ConnectOptionsBuilder::new_v3()
+                        .user_name(user.unwrap_or(""))
+                        .password(password.unwrap_or(""))
+                        .finalize()
+                }
             }
         };
         let token = self.client.connect(connect_opts);
