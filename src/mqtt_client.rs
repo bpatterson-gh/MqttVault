@@ -22,8 +22,7 @@ mod test {
     fn init_files() {
         INIT_FILES.call_once(|| {
             let path = Path::new(TEST_DB);
-            let res = std::fs::remove_dir_all(path);
-            assert!(res.is_ok());
+            std::fs::remove_dir_all(path).unwrap_or(());
         });
     }
 
