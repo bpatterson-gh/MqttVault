@@ -910,7 +910,7 @@ fn on_exit() {
     Logger::log_info("MQTT Halt");
 }
 
-const VERSION: &str = "1.0.1";
+const VERSION: &str = "1.0.2";
 
 fn main() {
     let args = init_args();
@@ -945,7 +945,7 @@ fn main() {
     }
 }
 
-//  Copyright ©️ Bruce Patterson 2022
+//  Copyright ©️ Bruce Patterson 2022-2024
 
 //  This Source Code Form is subject to the terms of the Mozilla Public
 //  License, v. 2.0. If a copy of the MPL was not distributed with this

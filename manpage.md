@@ -251,7 +251,7 @@ Bruce Patterson -
 
 # COPYRIGHT
 
-  ©️ Bruce Patterson 2022
+  ©️ Bruce Patterson 2022-2024
 
   This program's source code is subject to the terms of the Mozilla Public
   License, v. 2.0. If a copy of the MPL was not distributed with the 
